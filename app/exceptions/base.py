@@ -1,6 +1,7 @@
 class AppError(Exception):
     """Base class for errors that the API layer may safely expose."""
 
+    status_code = 500
     default_detail = "Application error"
 
     def __init__(self, detail: str | None = None) -> None:
@@ -9,16 +10,16 @@ class AppError(Exception):
 
 
 class NotFoundError(AppError):
-    pass
+    status_code = 404
 
 
 class AccessDeniedError(AppError):
-    pass
+    status_code = 403
 
 
 class ConflictError(AppError):
-    pass
+    status_code = 409
 
 
 class ValidationError(AppError):
-    pass
+    status_code = 422

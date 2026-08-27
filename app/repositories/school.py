@@ -235,10 +235,12 @@ class HomeworkRepository:
         )
         return list(result.scalars().all())
 
-    async def list_due_on(self, class_id: UUID, target_date: date) -> list[HomeworkORM]:
+    async def list_active_on(self, class_id: UUID, target_date: date) -> list[HomeworkORM]:
         result = await self.session.execute(
             select(HomeworkORM).where(
-                HomeworkORM.class_id == class_id, HomeworkORM.due_date == target_date
+                HomeworkORM.class_id == class_id,
+                HomeworkORM.assigned_date <= target_date,
+                HomeworkORM.due_date >= target_date,
             )
         )
         return list(result.scalars().all())

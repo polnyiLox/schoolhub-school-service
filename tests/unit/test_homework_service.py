@@ -20,6 +20,7 @@ def homework(class_id, subject_id, text="old"):
 
 def service(transaction_session, class_id, subject_id):
     repository = AsyncMock()
+    repository.update.side_effect = lambda entity, _: entity
     subjects = AsyncMock()
     subjects.get_by_id.return_value = SubjectORM(id=subject_id, class_id=class_id, name="Math", teacher_name=None)
     access = MagicMock()

@@ -34,7 +34,13 @@ class SchoolEventService(EventCollectingService):
             await self.access.require_editor(class_id, actor)
             self._validate_dates(data.starts_at, data.ends_at)
             entity = await self.repository.create(
-                class_id=class_id, created_by_telegram_id=actor.telegram_id, **data.model_dump()
+                class_id=class_id,
+                title=data.title,
+                description=data.description,
+                event_type=data.event_type,
+                starts_at=data.starts_at,
+                ends_at=data.ends_at,
+                created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("school_event.created", entity, actor)
         logger.info("school event created", extra={"class_id": str(class_id), "event_id": str(entity.id), "telegram_id": actor.telegram_id})
@@ -48,7 +54,7 @@ class SchoolEventService(EventCollectingService):
             starts_at = changes.get("starts_at", entity.starts_at)
             ends_at = changes.get("ends_at", entity.ends_at)
             self._validate_dates(starts_at, ends_at)
-            await self.repository.update(entity, changes)
+            entity = await self.repository.update(entity, changes)
         self._add_event("school_event.updated", entity, actor)
         logger.info("school event updated", extra={"class_id": str(class_id), "event_id": str(event_id), "telegram_id": actor.telegram_id})
         return entity

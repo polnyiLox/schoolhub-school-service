@@ -49,7 +49,12 @@ class HomeworkService(EventCollectingService):
             self._validate_dates(data.assigned_date, data.due_date)
             await self._require_subject(class_id, data.subject_id)
             entity = await self.repository.create(
-                class_id=class_id, created_by_telegram_id=actor.telegram_id, **data.model_dump()
+                class_id=class_id,
+                subject_id=data.subject_id,
+                assigned_date=data.assigned_date,
+                due_date=data.due_date,
+                text=data.text,
+                created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("homework.created", entity, actor, correlation_id)
         logger.info("homework created", extra={"class_id": str(class_id), "homework_id": str(entity.id), "telegram_id": actor.telegram_id, "correlation_id": correlation_id})
@@ -74,7 +79,7 @@ class HomeworkService(EventCollectingService):
                     changed_by_telegram_id=actor.telegram_id,
                 )
             changes["updated_by_telegram_id"] = actor.telegram_id
-            await self.repository.update(entity, changes)
+            entity = await self.repository.update(entity, changes)
         self._add_event("homework.updated", entity, actor)
         logger.info("homework updated", extra={"class_id": str(class_id), "homework_id": str(homework_id), "telegram_id": actor.telegram_id})
         return entity

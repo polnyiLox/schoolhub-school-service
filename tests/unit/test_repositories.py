@@ -11,6 +11,7 @@ from app.repositories import ClassMemberRepository, HomeworkRepository, SchoolCl
 def mock_session() -> MagicMock:
     session = MagicMock()
     session.execute = AsyncMock()
+    session.scalar = AsyncMock()
     session.get = AsyncMock()
     session.flush = AsyncMock()
     session.delete = AsyncMock()
@@ -18,12 +19,13 @@ def mock_session() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_class_repository_get_uses_session_get():
+async def test_class_repository_get_uses_scalar_query():
     session, class_id = mock_session(), uuid4()
     entity = SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")
-    session.get.return_value = entity
+    session.scalar.return_value = entity
     assert await SchoolClassRepository(session).get_by_id(class_id) is entity
-    session.get.assert_awaited_once_with(SchoolClassORM, class_id)
+    query = session.scalar.await_args.args[0]
+    assert class_id in query.compile().params.values()
 
 
 @pytest.mark.asyncio
@@ -49,38 +51,43 @@ async def test_class_repository_list_returns_scalars():
 @pytest.mark.asyncio
 async def test_member_repository_get_returns_none():
     session = mock_session()
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = None
-    session.execute.return_value = result
+    session.scalar.return_value = None
     assert await ClassMemberRepository(session).get(uuid4(), 123) is None
 
 
 @pytest.mark.asyncio
-async def test_member_repository_delete_uses_session_delete():
+async def test_member_repository_delete_executes_delete_statement():
     session = mock_session()
     member = ClassMemberORM(class_id=uuid4(), telegram_id=1, role=ClassMemberRole.STUDENT)
     await ClassMemberRepository(session).delete(member)
-    session.delete.assert_awaited_once_with(member)
+    statement = session.execute.await_args.args[0]
+    assert statement.is_delete
     session.flush.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_subject_repository_update_applies_only_changes():
+async def test_subject_repository_update_uses_update_statement():
     session = mock_session()
     subject = SubjectORM(class_id=uuid4(), name="Math", teacher_name=None)
-    result = await SubjectRepository(session).update(subject, {"teacher_name": "Mrs Smith"})
-    assert result.teacher_name == "Mrs Smith"
-    assert result.name == "Math"
+    session.scalar.return_value = subject
+    result = await SubjectRepository(session).update(
+        subject,
+        {"teacher_name": "Mrs Smith"},
+    )
+    assert result is subject
+    statement = session.scalar.await_args.args[0]
+    assert statement.is_update
     session.flush.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_homework_repository_get_uses_model_and_id():
+async def test_homework_repository_get_filters_by_id():
     session, homework_id = mock_session(), uuid4()
     homework = MagicMock(spec=HomeworkORM)
-    session.get.return_value = homework
+    session.scalar.return_value = homework
     assert await HomeworkRepository(session).get_by_id(homework_id) is homework
-    session.get.assert_awaited_once_with(HomeworkORM, homework_id)
+    query = session.scalar.await_args.args[0]
+    assert homework_id in query.compile().params.values()
 
 
 @pytest.mark.asyncio

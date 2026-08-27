@@ -41,7 +41,10 @@ class SchoolClassService(EventCollectingService):
     async def create(self, data: SchoolClassCreate, actor: CurrentUser, correlation_id: str | None = None) -> SchoolClassORM:
         self.access.require_admin(actor)
         async with self.session.begin():
-            entity = await self.repository.create(**data.model_dump())
+            entity = await self.repository.create(
+                name=data.name,
+                academic_year=data.academic_year,
+            )
         self.pending_events.append(build_domain_event(
             event_type="class.created", aggregate_type="class", aggregate_id=entity.id,
             actor_telegram_id=actor.telegram_id, class_id=entity.id, correlation_id=correlation_id,
@@ -68,7 +71,10 @@ class SchoolClassService(EventCollectingService):
             entity = await self.repository.get_by_id(class_id)
             if entity is None:
                 raise ClassNotFoundError()
-            await self.repository.update(entity, data.model_dump(exclude_unset=True))
+            entity = await self.repository.update(
+                entity,
+                data.model_dump(exclude_unset=True),
+            )
         logger.info("class updated", extra={"class_id": str(class_id), "telegram_id": actor.telegram_id})
         return entity
 
@@ -95,7 +101,11 @@ class ClassMemberService(EventCollectingService):
                 raise ClassNotFoundError()
             if await self.repository.get(class_id, data.telegram_id) is not None:
                 raise ClassMemberAlreadyExistsError()
-            entity = await self.repository.create(class_id=class_id, **data.model_dump())
+            entity = await self.repository.create(
+                class_id=class_id,
+                telegram_id=data.telegram_id,
+                role=data.role,
+            )
         self.pending_events.append(build_domain_event(
             event_type="class.member_added", aggregate_type="class_member", aggregate_id=entity.id,
             actor_telegram_id=actor.telegram_id, class_id=class_id, correlation_id=correlation_id,
@@ -110,7 +120,7 @@ class ClassMemberService(EventCollectingService):
             entity = await self.repository.get(class_id, telegram_id)
             if entity is None:
                 raise ClassMemberNotFoundError()
-            await self.repository.update(entity, data.model_dump())
+            entity = await self.repository.update(entity, data.model_dump())
         self.pending_events.append(build_domain_event(
             event_type="class.member_role_changed", aggregate_type="class_member", aggregate_id=entity.id,
             actor_telegram_id=actor.telegram_id, class_id=class_id,
@@ -150,7 +160,11 @@ class SubjectService(EventCollectingService):
         async with self.session.begin():
             if await self.access.class_repository.get_by_id(class_id) is None:
                 raise ClassNotFoundError()
-            entity = await self.repository.create(class_id=class_id, **data.model_dump())
+            entity = await self.repository.create(
+                class_id=class_id,
+                name=data.name,
+                teacher_name=data.teacher_name,
+            )
         self._add_event("subject.created", entity, actor)
         logger.info("subject created", extra={"class_id": str(class_id), "subject_id": str(entity.id)})
         return entity
@@ -159,7 +173,10 @@ class SubjectService(EventCollectingService):
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, subject_id)
-            await self.repository.update(entity, data.model_dump(exclude_unset=True))
+            entity = await self.repository.update(
+                entity,
+                data.model_dump(exclude_unset=True),
+            )
         self._add_event("subject.updated", entity, actor)
         logger.info("subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)})
         return entity

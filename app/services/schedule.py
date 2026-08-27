@@ -103,7 +103,15 @@ class ScheduleService(EventCollectingService):
             await self._require_subject(class_id, data.subject_id)
             if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
                 raise ScheduleConflictError()
-            entity = await self.repository.create_entry(class_id=class_id, **data.model_dump())
+            entity = await self.repository.create_entry(
+                class_id=class_id,
+                subject_id=data.subject_id,
+                weekday=data.weekday,
+                lesson_number=data.lesson_number,
+                start_time=data.start_time,
+                end_time=data.end_time,
+                room=data.room,
+            )
         self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
         logger.info("schedule changed", extra={"class_id": str(class_id), "schedule_entry_id": str(entity.id)})
         return entity
@@ -123,7 +131,7 @@ class ScheduleService(EventCollectingService):
             conflict = await self.repository.get_slot(class_id, weekday, lesson_number)
             if conflict is not None and conflict.id != entity.id:
                 raise ScheduleConflictError()
-            await self.repository.update_entry(entity, changes)
+            entity = await self.repository.update_entry(entity, changes)
         self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
         logger.info("schedule changed", extra={"class_id": str(class_id), "schedule_entry_id": str(entry_id)})
         return entity
@@ -143,7 +151,16 @@ class ScheduleService(EventCollectingService):
             if await self.repository.get_override_slot(class_id, data.date, data.lesson_number):
                 raise ScheduleConflictError("An override already exists for this lesson")
             entity = await self.repository.create_override(
-                class_id=class_id, created_by_telegram_id=actor.telegram_id, **data.model_dump()
+                class_id=class_id,
+                target_date=data.date,
+                lesson_number=data.lesson_number,
+                override_type=data.override_type,
+                subject_id=data.subject_id,
+                start_time=data.start_time,
+                end_time=data.end_time,
+                room=data.room,
+                reason=data.reason,
+                created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("schedule.override_created", "schedule_override", entity.id, class_id, actor)
         logger.info("schedule override created", extra={"class_id": str(class_id), "override_id": str(entity.id)})
@@ -164,7 +181,7 @@ class ScheduleService(EventCollectingService):
             conflict = await self.repository.get_override_slot(class_id, target_date, lesson_number)
             if conflict is not None and conflict.id != entity.id:
                 raise ScheduleConflictError("An override already exists for this lesson")
-            await self.repository.update_override(entity, changes)
+            entity = await self.repository.update_override(entity, changes)
         self._add_event("schedule.override_updated", "schedule_override", entity.id, class_id, actor)
         logger.info("schedule override updated", extra={"class_id": str(class_id), "override_id": str(override_id)})
         return entity

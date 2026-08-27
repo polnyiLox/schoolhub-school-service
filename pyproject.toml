@@ -1,7 +1,7 @@
 [project]
-name = "start-app"
+name = "school-service"
 version = "0.1.0"
-description = "Add your description here"
+description = "SchoolHub classes, schedules, homework and events service"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

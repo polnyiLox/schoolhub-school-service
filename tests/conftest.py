@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncGenerator, Generator
 
 import pytest
@@ -11,6 +12,21 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from testcontainers.community.postgres import PostgresContainer
+
+
+os.environ.setdefault("APP_CONFIG__DB__USER", "postgres")
+os.environ.setdefault("APP_CONFIG__DB__PASSWORD", "postgres")
+os.environ.setdefault("APP_CONFIG__DB__HOST", "localhost")
+os.environ.setdefault("APP_CONFIG__DB__PORT", "5432")
+os.environ.setdefault("APP_CONFIG__DB__NAME", "school_test")
+os.environ.setdefault("APP_CONFIG__API__V1_PREFIX", "/v1")
+os.environ.setdefault("APP_CONFIG__API__HOST", "0.0.0.0")
+os.environ.setdefault("APP_CONFIG__API__PORT", "8000")
+os.environ.setdefault("APP_CONFIG__API__RELOAD", "false")
+os.environ.setdefault("APP_CONFIG__MIDDLEWARE__ALLOW_ORIGINS", '["*"]')
+os.environ.setdefault("APP_CONFIG__MIDDLEWARE__ALLOW_METHODS", '["*"]')
+os.environ.setdefault("APP_CONFIG__MIDDLEWARE__ALLOW_HEADERS", '["*"]')
+os.environ.setdefault("APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS", "false")
 
 
 # ============================================================

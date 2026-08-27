@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: schoolhub-services
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api-gateway:8000
+          - auth-service:8000
+          - school-service:8000
+          - notification-service:8000
+          - analytics-service:8000

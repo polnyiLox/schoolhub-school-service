@@ -30,12 +30,16 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 async def get_current_user(
-    user_id: Annotated[UUID, Header(alias="X-User-ID")],
-    telegram_id: Annotated[int, Header(alias="X-Telegram-ID")],
-    global_role: Annotated[GlobalRole, Header(alias="X-Global-Role")],
+    gateway_user_id: Annotated[UUID, Header(alias="X-User-ID")],
+    gateway_telegram_id: Annotated[int, Header(alias="X-Telegram-ID")],
+    gateway_global_role: Annotated[GlobalRole, Header(alias="X-Global-Role")],
 ) -> CurrentUser:
     """Consume identity headers that the API Gateway has already authenticated."""
-    return CurrentUser(user_id=user_id, telegram_id=telegram_id, global_role=global_role)
+    return CurrentUser(
+        user_id=gateway_user_id,
+        telegram_id=gateway_telegram_id,
+        global_role=gateway_global_role,
+    )
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]

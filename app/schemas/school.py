@@ -1,4 +1,5 @@
-from datetime import date, datetime, time
+from datetime import date as date_type
+from datetime import datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -111,7 +112,7 @@ class ScheduleEntryRead(ORMReadModel):
 
 
 class ScheduleOverrideCreate(BaseModel):
-    date: date
+    date: date_type
     lesson_number: int = Field(gt=0)
     override_type: ScheduleOverrideType
     subject_id: UUID | None = None
@@ -122,7 +123,7 @@ class ScheduleOverrideCreate(BaseModel):
 
 
 class ScheduleOverrideUpdate(BaseModel):
-    date: date | None = None
+    date: date_type | None = None
     lesson_number: int | None = Field(default=None, gt=0)
     override_type: ScheduleOverrideType | None = None
     subject_id: UUID | None = None
@@ -135,7 +136,7 @@ class ScheduleOverrideUpdate(BaseModel):
 class ScheduleOverrideRead(ORMReadModel):
     id: UUID
     class_id: UUID
-    date: date
+    date: date_type
     lesson_number: int
     override_type: ScheduleOverrideType
     subject_id: UUID | None
@@ -159,7 +160,7 @@ class ScheduleLesson(BaseModel):
 
 
 class ScheduleDayRead(BaseModel):
-    date: date
+    date: date_type
     lessons: list[ScheduleLesson]
 
 
@@ -169,15 +170,15 @@ class ScheduleWeekRead(BaseModel):
 
 class HomeworkCreate(BaseModel):
     subject_id: UUID
-    assigned_date: date
-    due_date: date
+    assigned_date: date_type
+    due_date: date_type
     text: str = Field(min_length=1)
 
 
 class HomeworkUpdate(BaseModel):
     subject_id: UUID | None = None
-    assigned_date: date | None = None
-    due_date: date | None = None
+    assigned_date: date_type | None = None
+    due_date: date_type | None = None
     text: str | None = Field(default=None, min_length=1)
 
 
@@ -185,8 +186,8 @@ class HomeworkRead(ORMReadModel):
     id: UUID
     class_id: UUID
     subject_id: UUID
-    assigned_date: date
-    due_date: date
+    assigned_date: date_type
+    due_date: date_type
     text: str
     created_by_telegram_id: int
     updated_by_telegram_id: int | None
@@ -253,7 +254,7 @@ class SchoolEventRead(ORMReadModel):
 class DayHomework(BaseModel):
     id: UUID
     text: str
-    due_date: date
+    due_date: date_type
 
 
 class DayLesson(ScheduleLesson):
@@ -261,6 +262,6 @@ class DayLesson(ScheduleLesson):
 
 
 class ClassDayRead(BaseModel):
-    date: date
+    date: date_type
     lessons: list[DayLesson]
     events: list[SchoolEventRead]

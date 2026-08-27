@@ -43,6 +43,7 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+CorrelationIdDep = Annotated[str | None, Header(alias="X-Correlation-ID")]
 
 
 def get_class_repository(session: SessionDep) -> SchoolClassRepository:

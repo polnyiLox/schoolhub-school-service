@@ -1,0 +1,59 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Response, status
+
+from app.api.dependencies import CurrentUserDep, EventServiceDep
+from app.schemas import SchoolEventCreate, SchoolEventRead, SchoolEventUpdate
+
+router = APIRouter(prefix="/{class_id}/events", tags=["School events"])
+
+
+@router.get("", response_model=list[SchoolEventRead])
+async def list_events(
+    class_id: UUID,
+    actor: CurrentUserDep,
+    service: EventServiceDep,
+):
+    return await service.list(class_id, actor)
+
+
+@router.get("/{event_id}", response_model=SchoolEventRead)
+async def get_event(
+    class_id: UUID,
+    event_id: UUID,
+    actor: CurrentUserDep,
+    service: EventServiceDep,
+):
+    return await service.get(class_id, event_id, actor)
+
+
+@router.post("", response_model=SchoolEventRead, status_code=status.HTTP_201_CREATED)
+async def create_event(
+    class_id: UUID,
+    payload: SchoolEventCreate,
+    actor: CurrentUserDep,
+    service: EventServiceDep,
+):
+    return await service.create(class_id, payload, actor)
+
+
+@router.patch("/{event_id}", response_model=SchoolEventRead)
+async def update_event(
+    class_id: UUID,
+    event_id: UUID,
+    payload: SchoolEventUpdate,
+    actor: CurrentUserDep,
+    service: EventServiceDep,
+):
+    return await service.update(class_id, event_id, payload, actor)
+
+
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    class_id: UUID,
+    event_id: UUID,
+    actor: CurrentUserDep,
+    service: EventServiceDep,
+) -> Response:
+    await service.delete(class_id, event_id, actor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

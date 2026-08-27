@@ -20,7 +20,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="SchoolHub School Service", lifespan=lifespan)
 
 app.include_router(health_router)
-app.include_router(v1_router, prefix=settings.api.v1_prefix)
+app.include_router(v1_router)
 
 app.add_middleware(
     CORSMiddleware,

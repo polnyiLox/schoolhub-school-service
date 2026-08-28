@@ -69,6 +69,17 @@ async def test_invalid_academic_year_returns_422_without_service_call(client):
 
 
 @pytest.mark.asyncio
+async def test_empty_class_patch_returns_422_without_service_call(client):
+    service = service_mock()
+    app.dependency_overrides[get_class_service] = lambda: service
+
+    response = await client.patch(f"/v1/classes/{uuid4()}", json={})
+
+    assert response.status_code == 422
+    service.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_access_error_maps_to_403(client):
     service = service_mock()
     service.create.side_effect = ClassAccessDeniedError()

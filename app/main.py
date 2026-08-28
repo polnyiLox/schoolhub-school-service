@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.exception_handlers import register_exception_handlers
 from app.api.routers.v1 import router as v1_router
+from app.broker import kafka_client
 from app.core.config import settings
 from app.core.health import router as health_router
 from app.db.session import engine_dispose
@@ -12,8 +13,12 @@ from app.db.session import engine_dispose
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    yield
-    await engine_dispose()
+    try:
+        await kafka_client.connect_producer()
+        yield
+    finally:
+        await kafka_client.close_producer()
+        await engine_dispose()
 
 
 app = FastAPI(title="SchoolHub School Service", lifespan=lifespan)

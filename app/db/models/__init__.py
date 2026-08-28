@@ -1,5 +1,6 @@
 from .base import Base
 from .homework import HomeworkAttachmentORM, HomeworkORM, HomeworkRevisionORM
+from .outbox import OutboxEventORM
 from .schedule import ScheduleEntryORM, ScheduleOverrideORM
 from .school_class import ClassMemberORM, SchoolClassORM
 from .school_event import SchoolEventORM
@@ -11,6 +12,7 @@ __all__ = [
     "HomeworkAttachmentORM",
     "HomeworkORM",
     "HomeworkRevisionORM",
+    "OutboxEventORM",
     "ScheduleEntryORM",
     "ScheduleOverrideORM",
     "SchoolClassORM",

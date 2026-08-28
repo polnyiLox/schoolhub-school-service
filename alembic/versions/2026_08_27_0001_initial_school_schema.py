@@ -103,7 +103,10 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.CheckConstraint("lesson_number > 0", name="ck_override_lesson_number"),
-        sa.CheckConstraint("start_time IS NULL OR end_time IS NULL OR start_time < end_time", name="ck_override_time_order"),
+        sa.CheckConstraint(
+            "start_time IS NULL OR end_time IS NULL OR start_time < end_time",
+            name="ck_override_time_order",
+        ),
         sa.ForeignKeyConstraint(["class_id"], ["school_classes.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["subject_id"], ["subjects.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
@@ -143,7 +146,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.CheckConstraint("ends_at IS NULL OR ends_at >= starts_at", name="ck_school_event_date_order"),
+        sa.CheckConstraint(
+            "ends_at IS NULL OR ends_at >= starts_at", name="ck_school_event_date_order"
+        ),
         sa.ForeignKeyConstraint(["class_id"], ["school_classes.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

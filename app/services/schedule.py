@@ -159,6 +159,7 @@ class ScheduleService(EventCollectingService):
         logger.info("Creating schedule entry: class_id=%s, weekday=%d, lesson=%d", class_id, data.weekday, data.lesson_number)
         self.access.require_admin(actor)
         async with self.session.begin():
+            await self.access.require_member(class_id, actor)
             await self._require_subject(class_id, data.subject_id)
             if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
                 logger.warning("Schedule slot conflict: class_id=%s, weekday=%d, lesson=%d", class_id, data.weekday, data.lesson_number)
@@ -214,6 +215,7 @@ class ScheduleService(EventCollectingService):
         logger.info("Creating schedule override: class_id=%s, date=%s, lesson=%d", class_id, data.date, data.lesson_number)
         self.access.require_admin(actor)
         async with self.session.begin():
+            await self.access.require_member(class_id, actor)
             await self._validate_override(class_id, data.override_type, data.subject_id, data.start_time, data.end_time)
             if await self.repository.get_override_slot(class_id, data.date, data.lesson_number):
                 logger.warning("Schedule override conflict: class_id=%s, date=%s, lesson=%d", class_id, data.date, data.lesson_number)

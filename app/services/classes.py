@@ -190,9 +190,7 @@ class SubjectService(EventCollectingService):
         logger.info("Creating subject: class_id=%s", class_id)
         self.access.require_admin(actor)
         async with self.session.begin():
-            if await self.access.class_repository.get_by_id(class_id) is None:
-                logger.warning("Cannot create subject because class was not found: class_id=%s", class_id)
-                raise ClassNotFoundError()
+            await self.access.require_member(class_id, actor)
             entity = await self.repository.create(
                 class_id=class_id,
                 name=data.name,

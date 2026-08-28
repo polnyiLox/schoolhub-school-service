@@ -8,14 +8,15 @@
 ```text
 API -> Service -> Repository -> PostgreSQL
               -> Redis cache
-API -> Kafka producer
+              -> outbox_events (same transaction)
+Outbox relay -> Kafka
 ```
 
 - API отвечает за HTTP-контракты, dependency injection и преобразование ошибок.
 - Service проверяет роли и membership, управляет транзакциями и бизнес-правилами.
 - Repository содержит только SQLAlchemy 2 запросы и не выполняет `commit()`.
-- Изменяющие операции формируют `DomainEvent`; API публикует накопленные события
-  после успешного завершения service method.
+- Изменяющие операции сохраняют бизнес-данные и `DomainEvent` атомарно в PostgreSQL.
+- Outbox relay публикует сохранённые события в Kafka с retry/backoff.
 
 ## Запуск
 
@@ -35,6 +36,12 @@ docker compose -f docker-compose.dev.yaml up --build
 - Grafana: `http://localhost:3000`
 - Prometheus: `http://localhost:9090`
 - Loki: `http://localhost:3100`
+
+Проверки состояния:
+
+- `/health` и `/health/live` — liveness без внешних зависимостей;
+- `/health/ready` — PostgreSQL, Kafka и outbox relay; недоступный Redis отмечается
+  как деградация, но не выключает сервис.
 
 ## Авторизация
 
@@ -69,6 +76,9 @@ X-Correlation-ID: <optional string>
 ## Тесты
 
 ```bash
+uv run ruff check app tests
+uv run ruff format --check app tests
+uv run mypy app
 uv run pytest tests/unit -q
 uv run pytest tests/integration -q
 uv run pytest tests/e2e -q
@@ -77,10 +87,10 @@ uv run pytest tests/e2e -q
 Unit-тесты используют mock session/repositories/services. Integration и E2E запускают
 настоящий PostgreSQL через Testcontainers, поэтому им нужен работающий Docker daemon.
 
-Текущий набор содержит 101 тест:
+Текущий набор содержит 142 теста:
 
-- 86 unit: repository, services, API, merge расписания, события, Kafka и Redis;
-- 12 integration: 6 repository + PostgreSQL, 4 service + PostgreSQL, 2 API + PostgreSQL;
+- 125 unit: repository, services, API, cache, Kafka, outbox relay и readiness;
+- 14 integration: repository, service, transactional outbox и API с PostgreSQL;
 - 3 E2E flow: class-to-day, замена урока и история домашнего задания.
 
 ## Kafka
@@ -89,16 +99,19 @@ Unit-тесты используют mock session/repositories/services. Integra
 School Service подключается к `kafka:29092`, а с хоста broker доступен через
 `localhost:9092`.
 
-Изменяющие API-операции публикуют подготовленные `DomainEvent` в topic
-`school.events`. `aggregate_id` используется как message key, поэтому события одного
-aggregate попадают в одну partition и сохраняют порядок внутри неё.
+Изменяющие API-операции сохраняют подготовленные `DomainEvent` в таблицу
+`outbox_events` внутри той же транзакции, что и бизнес-изменения. Затем фоновый relay
+читает доступные записи через `FOR UPDATE SKIP LOCKED` и публикует их в topic,
+сохранённый вместе с событием. `aggregate_id` используется как message key, поэтому
+события одного aggregate попадают в одну partition и сохраняют порядок внутри неё.
 
-Producer создаётся один раз в lifespan приложения. Настройки находятся в секции
-`APP_CONFIG__KAFKA__*` файла `.env`.
+Producer и relay создаются один раз в lifespan приложения. Настройки находятся в
+секциях `APP_CONFIG__KAFKA__*` и `APP_CONFIG__OUTBOX__*` файла `.env`.
 
-Текущий flow выполняет DB commit перед Kafka publish. Это понятный начальный вариант,
-но при недоступной Kafka данные уже могут быть сохранены в PostgreSQL. Transactional
-Outbox должен быть добавлен следующим отдельным этапом для гарантированной доставки.
+Неуспешная отправка планируется повторно с exponential backoff. После исчерпания
+`MAX_ATTEMPTS` запись получает статус `failed` и сохраняет последнюю ошибку. Relay
+поддерживает несколько экземпляров сервиса, но семантика доставки остаётся
+at-least-once: consumers должны дедуплицировать события по `event_id`.
 
 Заголовок `X-Correlation-ID` переносится во все Kafka-события изменяющих операций.
 
@@ -139,7 +152,6 @@ Application-level `/metrics` и counters/histograms намеренно не ре
 
 - JWT и Telegram auth internals — в Auth Service/API Gateway;
 - Kafka consumers в Analytics и Notification Service;
-- Transactional Outbox и отдельный outbox publisher;
 - RabbitMQ publisher/consumer для Telegram-команд;
 - расширенное structured/JSON logging, если оно понадобится;
 - Prometheus middleware, `/metrics` и business metrics;

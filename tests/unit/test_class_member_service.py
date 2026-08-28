@@ -5,7 +5,11 @@ import pytest
 
 from app.db.models import ClassMemberORM, SchoolClassORM
 from app.enums import ClassMemberRole
-from app.exceptions import ClassAccessDeniedError, ClassMemberAlreadyExistsError
+from app.exceptions import (
+    ClassAccessDeniedError,
+    ClassMemberAlreadyExistsError,
+    ClassMemberNotFoundError,
+)
 from app.schemas import ClassMemberCreate, ClassMemberUpdate, SchoolClassCreate
 from app.services import ClassMemberService, SchoolClassService
 
@@ -82,3 +86,15 @@ async def test_admin_can_promote_student_to_editor(transaction_session, admin):
     )
     assert service.pending_events[0].event_type == "class.member_role_changed"
     assert service.pending_events[0].payload["role"] == "editor"
+
+
+@pytest.mark.asyncio
+async def test_missing_member_is_not_found_on_delete(transaction_session, admin):
+    repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
+    repository.get.return_value = None
+    service = ClassMemberService(transaction_session, repository, classes, access)
+
+    with pytest.raises(ClassMemberNotFoundError):
+        await service.delete(uuid4(), 20, admin)
+
+    repository.delete.assert_not_awaited()

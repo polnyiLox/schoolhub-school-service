@@ -5,7 +5,12 @@ from uuid import uuid4
 import pytest
 
 from app.db.models import HomeworkORM, SubjectORM
-from app.exceptions import ClassAccessDeniedError, InvalidHomeworkDatesError, SubjectDoesNotBelongToClassError
+from app.exceptions import (
+    ClassAccessDeniedError,
+    HomeworkNotFoundError,
+    InvalidHomeworkDatesError,
+    SubjectDoesNotBelongToClassError,
+)
 from app.schemas import HomeworkCreate, HomeworkRead, HomeworkUpdate
 from app.services import HomeworkService
 
@@ -45,6 +50,15 @@ async def test_homework_cache_hit_skips_database(transaction_session, user):
 
     assert result is cached
     repository.get_by_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_homework_is_not_found(transaction_session, user):
+    tested, repository, _, _ = service(transaction_session, uuid4(), uuid4())
+    repository.get_by_id.return_value = None
+
+    with pytest.raises(HomeworkNotFoundError):
+        await tested.get(uuid4(), uuid4(), user)
 
 
 @pytest.mark.asyncio

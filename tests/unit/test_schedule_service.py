@@ -11,6 +11,7 @@ from app.exceptions import (
     InvalidScheduleOverrideError,
     InvalidScheduleTimeError,
     ScheduleConflictError,
+    ScheduleEntryNotFoundError,
 )
 from app.schemas import ScheduleDayRead, ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleOverrideCreate
 from app.services import ScheduleService
@@ -76,6 +77,15 @@ async def test_schedule_entry_update_rejects_invalid_time(transaction_session, a
     repository.get_entry.return_value = ScheduleEntryORM(id=entry_id, class_id=class_id, subject_id=subject_id, weekday=0, lesson_number=1, start_time=time(8), end_time=time(9))
     with pytest.raises(InvalidScheduleTimeError):
         await service.update_entry(class_id, entry_id, ScheduleEntryUpdate(start_time=time(10)), admin)
+
+
+@pytest.mark.asyncio
+async def test_missing_schedule_entry_is_not_found(transaction_session, admin):
+    service, repository = dependencies(transaction_session, uuid4(), uuid4())
+    repository.get_entry.return_value = None
+
+    with pytest.raises(ScheduleEntryNotFoundError):
+        await service.delete_entry(uuid4(), uuid4(), admin)
 
 
 @pytest.mark.asyncio

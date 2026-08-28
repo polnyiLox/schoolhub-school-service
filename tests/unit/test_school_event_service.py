@@ -6,7 +6,7 @@ import pytest
 
 from app.db.models import SchoolEventORM
 from app.enums import SchoolEventType
-from app.exceptions import InvalidSchoolEventDatesError
+from app.exceptions import InvalidSchoolEventDatesError, SchoolEventNotFoundError
 from app.schemas import SchoolEventCreate, SchoolEventUpdate
 from app.services import SchoolEventService
 
@@ -44,3 +44,15 @@ async def test_event_update_validates_effective_dates(transaction_session, user)
     repository.get_by_id.return_value = entity
     with pytest.raises(InvalidSchoolEventDatesError):
         await SchoolEventService(transaction_session, repository, access).update(class_id, entity.id, SchoolEventUpdate(ends_at=now - timedelta(minutes=1)), user)
+
+
+@pytest.mark.asyncio
+async def test_missing_school_event_is_not_found(transaction_session, user):
+    repository, access = AsyncMock(), MagicMock()
+    access.require_member = AsyncMock()
+    repository.get_by_id.return_value = None
+
+    with pytest.raises(SchoolEventNotFoundError):
+        await SchoolEventService(transaction_session, repository, access).get(
+            uuid4(), uuid4(), user,
+        )

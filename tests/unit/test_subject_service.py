@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from app.db.models import SubjectORM
-from app.exceptions import ClassNotFoundError
+from app.exceptions import ClassNotFoundError, SubjectNotFoundError
 from app.schemas import SubjectCreate, SubjectUpdate
 from app.services import SubjectService
 
@@ -35,3 +35,13 @@ async def test_subject_create_requires_existing_class(transaction_session, admin
         await service.create(uuid4(), SubjectCreate(name="Math"), admin)
 
     repository.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_subject_is_not_found(transaction_session, admin):
+    repository = AsyncMock()
+    repository.get_by_id.return_value = None
+    service = SubjectService(transaction_session, repository, MagicMock())
+
+    with pytest.raises(SubjectNotFoundError):
+        await service.update(uuid4(), uuid4(), SubjectUpdate(name="Physics"), admin)

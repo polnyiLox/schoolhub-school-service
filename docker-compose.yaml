@@ -65,6 +65,27 @@ services:
       start_period: 20s
 
 
+  kafka-init:
+    image: apache/kafka:4.0.0
+
+    command:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server
+      - kafka:29092
+      - --create
+      - --if-not-exists
+      - --topic
+      - ${APP_CONFIG__KAFKA__TOPIC:-school.events}
+      - --partitions
+      - "3"
+      - --replication-factor
+      - "1"
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+
   migrate:
     build:
       context: .
@@ -99,8 +120,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
     healthcheck:
       test:

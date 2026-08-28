@@ -13,7 +13,6 @@ from app.core.health import router as health_router
 from app.core.logging import configure_logging
 from app.db.session import engine_dispose
 
-configure_logging(settings.logging.level)
 logger = logging.getLogger(__name__)
 
 
@@ -26,6 +25,7 @@ async def connect_cache() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    configure_logging(settings.logging.level)
     logger.info("Starting school-service")
     try:
         await connect_cache()

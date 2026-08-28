@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.enums import ClassMemberRole
-from app.schemas.common import ORMReadModel
+from app.schemas.common import NonEmptyUpdateModel, ORMReadModel
 
 
 class SchoolClassCreate(BaseModel):
@@ -12,7 +12,7 @@ class SchoolClassCreate(BaseModel):
     academic_year: str = Field(pattern=r"^\d{4}/\d{4}$")
 
 
-class SchoolClassUpdate(BaseModel):
+class SchoolClassUpdate(NonEmptyUpdateModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     academic_year: str | None = Field(default=None, pattern=r"^\d{4}/\d{4}$")
     is_archived: bool | None = None

@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 from app.enums import ScheduleLessonStatus, ScheduleOverrideType
-from app.schemas.common import ORMReadModel
+from app.schemas.common import NonEmptyUpdateModel, ORMReadModel
 from app.schemas.subject import SubjectRead
 
 
@@ -24,7 +24,7 @@ class ScheduleEntryCreate(BaseModel):
         return self
 
 
-class ScheduleEntryUpdate(BaseModel):
+class ScheduleEntryUpdate(NonEmptyUpdateModel):
     subject_id: UUID | None = None
     weekday: int | None = Field(default=None, ge=0, le=6)
     lesson_number: int | None = Field(default=None, gt=0)
@@ -57,7 +57,7 @@ class ScheduleOverrideCreate(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
-class ScheduleOverrideUpdate(BaseModel):
+class ScheduleOverrideUpdate(NonEmptyUpdateModel):
     date: date_type | None = None
     lesson_number: int | None = Field(default=None, gt=0)
     override_type: ScheduleOverrideType | None = None

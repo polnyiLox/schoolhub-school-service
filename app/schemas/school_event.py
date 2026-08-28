@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.enums import SchoolEventType
-from app.schemas.common import ORMReadModel
+from app.schemas.common import NonEmptyUpdateModel, ORMReadModel
 
 
 class SchoolEventCreate(BaseModel):
@@ -15,7 +15,7 @@ class SchoolEventCreate(BaseModel):
     ends_at: datetime | None = None
 
 
-class SchoolEventUpdate(BaseModel):
+class SchoolEventUpdate(NonEmptyUpdateModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     event_type: SchoolEventType | None = None

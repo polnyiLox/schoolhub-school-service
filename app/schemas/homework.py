@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.common import ORMReadModel
+from app.schemas.common import NonEmptyUpdateModel, ORMReadModel
 
 
 class HomeworkCreate(BaseModel):
@@ -14,7 +14,7 @@ class HomeworkCreate(BaseModel):
     text: str = Field(min_length=1)
 
 
-class HomeworkUpdate(BaseModel):
+class HomeworkUpdate(NonEmptyUpdateModel):
     subject_id: UUID | None = None
     assigned_date: date_type | None = None
     due_date: date_type | None = None

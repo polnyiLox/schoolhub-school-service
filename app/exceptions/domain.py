@@ -25,6 +25,10 @@ class SubjectDoesNotBelongToClassError(ValidationError):
     default_detail = "Subject does not belong to the class"
 
 
+class SubjectInUseError(ConflictError):
+    default_detail = "Subject is used by schedule entries or homework"
+
+
 class ScheduleEntryNotFoundError(NotFoundError):
     default_detail = "Schedule entry not found"
 

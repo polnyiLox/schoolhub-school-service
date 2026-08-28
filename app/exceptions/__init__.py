@@ -14,6 +14,7 @@ from .domain import (
     ScheduleOverrideNotFoundError,
     SchoolEventNotFoundError,
     SubjectDoesNotBelongToClassError,
+    SubjectInUseError,
     SubjectNotFoundError,
 )
 

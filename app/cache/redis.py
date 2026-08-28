@@ -17,6 +17,10 @@ class RedisCache(Cache):
         self._settings = settings
         self._connect_lock = asyncio.Lock()
 
+    @property
+    def is_connected(self) -> bool:
+        return self._redis is not None
+
     async def connect(self) -> None:
         if self._redis is not None:
             return

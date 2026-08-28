@@ -17,6 +17,10 @@ class KafkaClient:
         self._settings = settings
         self._connect_lock = asyncio.Lock()
 
+    @property
+    def is_connected(self) -> bool:
+        return self._producer is not None
+
     async def connect_producer(self) -> None:
         if self._producer is not None:
             return

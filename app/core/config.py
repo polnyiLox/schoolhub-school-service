@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +73,23 @@ class LoggingSettings(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
+class OutboxSettings(BaseModel):
+    poll_interval_seconds: float = Field(default=1.0, gt=0)
+    batch_size: int = Field(default=100, ge=1, le=1_000)
+    max_attempts: int = Field(default=10, ge=1)
+    retry_base_seconds: float = Field(default=1.0, gt=0)
+    retry_max_seconds: float = Field(default=300.0, gt=0)
+    shutdown_timeout_seconds: float = Field(default=10.0, gt=0)
+
+    @model_validator(mode="after")
+    def validate_retry_range(self) -> OutboxSettings:
+        if self.retry_max_seconds < self.retry_base_seconds:
+            raise ValueError(
+                "retry_max_seconds must be greater than or equal to retry_base_seconds"
+            )
+        return self
+
+
 class Settings(BaseSettings):
     db: DataBaseSettings
     api: ApiSettings
@@ -80,6 +97,7 @@ class Settings(BaseSettings):
     kafka: KafkaSettings = Field(default_factory=KafkaSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    outbox: OutboxSettings = Field(default_factory=OutboxSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env",

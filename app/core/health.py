@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.broker import kafka_client
+from app.broker import kafka_client, outbox_relay
 from app.cache import redis_cache
 from app.db.session import engine
 
@@ -34,9 +34,10 @@ async def readiness_handler() -> JSONResponse:
     checks = {
         "database": "up" if await check_database() else "down",
         "kafka": "up" if kafka_client.is_connected else "down",
+        "outbox_relay": "up" if outbox_relay.is_running else "down",
         "redis": "up" if redis_cache.is_connected else "degraded",
     }
-    if checks["database"] == "down" or checks["kafka"] == "down":
+    if any(checks[name] == "down" for name in ("database", "kafka", "outbox_relay")):
         return JSONResponse(
             status_code=503,
             content={"status": "unavailable", "checks": checks},

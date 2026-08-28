@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.exception_handlers import register_exception_handlers
 from app.api.routers.v1 import router as v1_router
 from app.broker import kafka_client
+from app.cache import redis_cache
 from app.core.config import settings
 from app.core.health import router as health_router
 from app.core.logging import configure_logging
@@ -20,13 +21,19 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI):
     logger.info("Starting school-service")
     try:
+        await redis_cache.connect()
         await kafka_client.connect_producer()
         logger.info("School-service started")
         yield
     finally:
         logger.info("Stopping school-service")
-        await kafka_client.close_producer()
-        await engine_dispose()
+        try:
+            await kafka_client.close_producer()
+        finally:
+            try:
+                await redis_cache.close()
+            finally:
+                await engine_dispose()
         logger.info("School-service stopped")
 
 

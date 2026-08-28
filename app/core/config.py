@@ -80,6 +80,8 @@ class OutboxSettings(BaseModel):
     retry_base_seconds: float = Field(default=1.0, gt=0)
     retry_max_seconds: float = Field(default=300.0, gt=0)
     shutdown_timeout_seconds: float = Field(default=10.0, gt=0)
+    published_retention_hours: int = Field(default=168, ge=1)
+    cleanup_interval_seconds: float = Field(default=3_600.0, gt=0)
 
     @model_validator(mode="after")
     def validate_retry_range(self) -> OutboxSettings:

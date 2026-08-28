@@ -71,7 +71,15 @@ class OutboxRelay:
                 await repository.mark_published(record.id, now)
         return len(records)
 
+    async def cleanup_published(self) -> None:
+        cutoff = datetime.now(UTC) - timedelta(hours=self._settings.published_retention_hours)
+        async with self._session_factory() as session, session.begin():
+            await OutboxRepository(session).delete_published_before(cutoff)
+        logger.info("Expired published outbox events removed", extra={"cutoff": cutoff.isoformat()})
+
     async def _run(self) -> None:
+        loop = asyncio.get_running_loop()
+        next_cleanup_at = loop.time() + self._settings.cleanup_interval_seconds
         while not self._stop_event.is_set():
             try:
                 processed = await self.process_batch()
@@ -80,6 +88,15 @@ class OutboxRelay:
             except Exception:
                 logger.exception("Unexpected outbox relay failure")
                 processed = 0
+
+            if loop.time() >= next_cleanup_at:
+                try:
+                    await self.cleanup_published()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Outbox cleanup failed")
+                next_cleanup_at = loop.time() + self._settings.cleanup_interval_seconds
 
             if processed >= self._settings.batch_size:
                 continue

@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import builtins
 from collections.abc import Mapping
 from datetime import date
 from uuid import UUID
@@ -29,7 +32,7 @@ class HomeworkRepository:
         self,
         class_id: UUID,
         target_date: date,
-    ) -> list[HomeworkORM]:
+    ) -> builtins.list[HomeworkORM]:
         query = select(HomeworkORM).where(
             HomeworkORM.class_id == class_id,
             HomeworkORM.assigned_date <= target_date,
@@ -98,7 +101,7 @@ class HomeworkRepository:
         await self.session.flush()
         return revision
 
-    async def list_revisions(self, homework_id: UUID) -> list[HomeworkRevisionORM]:
+    async def list_revisions(self, homework_id: UUID) -> builtins.list[HomeworkRevisionORM]:
         query = (
             select(HomeworkRevisionORM)
             .where(HomeworkRevisionORM.homework_id == homework_id)

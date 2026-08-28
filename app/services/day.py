@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID

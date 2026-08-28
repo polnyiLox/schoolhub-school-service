@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import builtins
 from collections.abc import Mapping
 from uuid import UUID
 
@@ -20,7 +23,7 @@ class SchoolClassRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def list_for_telegram_id(self, telegram_id: int) -> list[SchoolClassORM]:
+    async def list_for_telegram_id(self, telegram_id: int) -> builtins.list[SchoolClassORM]:
         query = (
             select(SchoolClassORM)
             .join(ClassMemberORM)

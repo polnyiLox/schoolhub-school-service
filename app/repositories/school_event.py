@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import builtins
 from collections.abc import Mapping
 from datetime import datetime
 from uuid import UUID
@@ -31,7 +34,7 @@ class SchoolEventRepository:
         class_id: UUID,
         day_start: datetime,
         day_end: datetime,
-    ) -> list[SchoolEventORM]:
+    ) -> builtins.list[SchoolEventORM]:
         query = (
             select(SchoolEventORM)
             .where(

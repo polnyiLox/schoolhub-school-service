@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import builtins
 import logging
 from datetime import date
 from uuid import UUID
@@ -108,7 +111,7 @@ class HomeworkService(EventCollectingService):
         class_id: UUID,
         homework_id: UUID,
         actor: CurrentUser,
-    ) -> list[HomeworkRevisionRead]:
+    ) -> builtins.list[HomeworkRevisionRead]:
         logger.info("Getting homework history: class_id=%s, homework_id=%s", class_id, homework_id)
         await self.access.require_member(class_id, actor)
         if self.cache is not None:

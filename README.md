@@ -7,12 +7,15 @@
 
 ```text
 API -> Service -> Repository -> PostgreSQL
+              -> Redis cache
+API -> Kafka producer
 ```
 
 - API отвечает за HTTP-контракты, dependency injection и преобразование ошибок.
 - Service проверяет роли и membership, управляет транзакциями и бизнес-правилами.
 - Repository содержит только SQLAlchemy 2 запросы и не выполняет `commit()`.
-- Изменяющие операции формируют `DomainEvent` в `pending_events`, но не публикуют его.
+- Изменяющие операции формируют `DomainEvent`; API публикует накопленные события
+  после успешного завершения service method.
 
 ## Запуск
 
@@ -74,6 +77,12 @@ uv run pytest tests/e2e -q
 Unit-тесты используют mock session/repositories/services. Integration и E2E запускают
 настоящий PostgreSQL через Testcontainers, поэтому им нужен работающий Docker daemon.
 
+Текущий набор содержит 101 тест:
+
+- 86 unit: repository, services, API, merge расписания, события, Kafka и Redis;
+- 12 integration: 6 repository + PostgreSQL, 4 service + PostgreSQL, 2 API + PostgreSQL;
+- 3 E2E flow: class-to-day, замена урока и история домашнего задания.
+
 ## Kafka
 
 При запуске через Compose поднимается single-node Kafka в KRaft-режиме. Контейнер
@@ -91,6 +100,29 @@ Producer создаётся один раз в lifespan приложения. Н
 но при недоступной Kafka данные уже могут быть сохранены в PostgreSQL. Transactional
 Outbox должен быть добавлен следующим отдельным этапом для гарантированной доставки.
 
+Заголовок `X-Correlation-ID` переносится во все Kafka-события изменяющих операций.
+
+## Redis
+
+Redis используется как необязательный cache-aside слой:
+
+- расписание на день и неделю;
+- список, отдельное домашнее задание и история изменений;
+- централизованные версионированные ключи с prefix `school-service:v1`;
+- TTL настраивается через `APP_CONFIG__REDIS__DEFAULT_TTL_SECONDS`;
+- изменения расписания, предметов и домашних заданий инвалидируют связанные ключи.
+
+Ошибки чтения и записи кэша логируются, после чего сервис продолжает работу через
+PostgreSQL. Если Redis недоступен при прямом запуске приложения, startup также
+продолжается без кэша. `app/services/events.py` намеренно оставлен без read-through
+кэширования как понятный пример для самостоятельного упражнения.
+
+## Логирование
+
+Базовая конфигурация пишет логи в stdout. Сервисы логируют вход и успешный выход
+публичных операций, обращения к БД, cache hit/miss, бизнес-валидации, отказы доступа
+и неожиданные исключения. Секреты и содержимое домашних заданий в логи не выводятся.
+
 ## Observability
 
 В `infrastructure/` находятся:
@@ -100,9 +132,8 @@ Outbox должен быть добавлен следующим отдельн�
 - Loki с локальным filesystem storage;
 - Grafana Alloy для чтения Docker stdout/stderr и label `service`.
 
-Application-level `/metrics`, counters/histograms и настройка Python logging намеренно
-не реализованы. До добавления `/metrics` Prometheus targets приложения будут показываться
-как недоступные.
+Application-level `/metrics` и counters/histograms намеренно не реализованы. До
+добавления `/metrics` Prometheus targets приложения будут показываться как недоступные.
 
 ## Намеренно оставлено для самостоятельной реализации
 
@@ -110,7 +141,6 @@ Application-level `/metrics`, counters/histograms и настройка Python l
 - Kafka consumers в Analytics и Notification Service;
 - Transactional Outbox и отдельный outbox publisher;
 - RabbitMQ publisher/consumer для Telegram-команд;
-- Redis cache, в первую очередь для расписания класса на дату;
-- `configure_logging()` и structured logging;
+- расширенное structured/JSON logging, если оно понадобится;
 - Prometheus middleware, `/metrics` и business metrics;
 - S3/MinIO upload flow для `HomeworkAttachmentORM`.

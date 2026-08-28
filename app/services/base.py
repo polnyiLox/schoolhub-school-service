@@ -2,7 +2,7 @@ from app.schemas import DomainEvent
 
 
 class EventCollectingService:
-    """Keeps event payloads until Kafka publishing is implemented by the project owner."""
+    """Keeps domain events until the API layer publishes them to Kafka."""
 
     def __init__(self) -> None:
         self.pending_events: list[DomainEvent] = []

@@ -123,9 +123,10 @@ def get_schedule_service(
 
 
 def get_homework_service(
-    session: SessionDep, repo: HomeworkRepoDep, subject_repo: SubjectRepoDep, access: AccessDep
+    session: SessionDep, repo: HomeworkRepoDep, subject_repo: SubjectRepoDep,
+    access: AccessDep, cache: JsonCacheDep,
 ) -> HomeworkService:
-    return HomeworkService(session, repo, subject_repo, access)
+    return HomeworkService(session, repo, subject_repo, access, cache)
 
 
 def get_event_service(session: SessionDep, repo: EventRepoDep, access: AccessDep) -> SchoolEventService:

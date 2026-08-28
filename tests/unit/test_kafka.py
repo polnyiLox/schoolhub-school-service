@@ -4,11 +4,9 @@ from uuid import uuid4
 
 import pytest
 
-from app.api.event_publishing import execute_and_publish
 from app.broker import KafkaClient, KafkaProducer
 from app.core.config import KafkaSettings
 from app.schemas import build_domain_event
-from app.services.base import EventCollectingService
 
 
 def event(event_type: str = "homework.created"):
@@ -97,72 +95,3 @@ async def test_publish_can_override_default_topic():
     await KafkaProducer(client, KafkaSettings()).publish(event(), topic="school.audit")
 
     assert raw_producer.send_and_wait.await_args.kwargs["topic"] == "school.audit"
-
-
-@pytest.mark.asyncio
-async def test_execute_and_publish_returns_operation_result():
-    service = EventCollectingService()
-    domain_event = event()
-    service.pending_events.append(domain_event)
-    producer = AsyncMock(spec=KafkaProducer)
-
-    async def operation() -> str:
-        return "created"
-
-    result = await execute_and_publish(operation(), service, producer)
-
-    assert result == "created"
-    producer.publish.assert_awaited_once_with(domain_event)
-    assert service.pending_events == []
-
-
-@pytest.mark.asyncio
-async def test_execute_and_publish_adds_request_correlation_id():
-    service = EventCollectingService()
-    domain_event = event()
-    service.pending_events.append(domain_event)
-    producer = AsyncMock(spec=KafkaProducer)
-
-    async def operation() -> None:
-        return None
-
-    await execute_and_publish(
-        operation(),
-        service,
-        producer,
-        correlation_id="request-42",
-    )
-
-    published_event = producer.publish.await_args.args[0]
-    assert published_event.correlation_id == "request-42"
-
-
-@pytest.mark.asyncio
-async def test_failed_service_operation_does_not_publish():
-    service = EventCollectingService()
-    producer = AsyncMock(spec=KafkaProducer)
-
-    async def operation() -> None:
-        raise ValueError("database error")
-
-    with pytest.raises(ValueError, match="database error"):
-        await execute_and_publish(operation(), service, producer)
-
-    producer.publish.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_publish_failure_keeps_pending_event():
-    service = EventCollectingService()
-    domain_event = event()
-    service.pending_events.append(domain_event)
-    producer = AsyncMock(spec=KafkaProducer)
-    producer.publish.side_effect = RuntimeError("Kafka unavailable")
-
-    async def operation() -> None:
-        return None
-
-    with pytest.raises(RuntimeError, match="Kafka unavailable"):
-        await execute_and_publish(operation(), service, producer)
-
-    assert service.get_pending_events() == (domain_event,)

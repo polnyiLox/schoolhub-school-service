@@ -4,7 +4,6 @@ from uuid import UUID
 from fastapi import Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.broker import KafkaProducer, kafka_producer
 from app.cache import JsonCache, json_cache
 from app.core.config import settings
 from app.db.session import get_session
@@ -48,13 +47,6 @@ async def get_current_user(
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 CorrelationIdDep = Annotated[str | None, Header(alias="X-Correlation-ID")]
-
-
-def get_kafka_producer() -> KafkaProducer:
-    return kafka_producer
-
-
-KafkaProducerDep = Annotated[KafkaProducer, Depends(get_kafka_producer)]
 
 
 def get_json_cache() -> JsonCache:

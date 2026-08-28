@@ -6,9 +6,7 @@ from app.api.dependencies import (
     CorrelationIdDep,
     CurrentUserDep,
     HomeworkServiceDep,
-    KafkaProducerDep,
 )
-from app.api.event_publishing import execute_and_publish
 from app.schemas import HomeworkCreate, HomeworkRead, HomeworkRevisionRead, HomeworkUpdate
 
 router = APIRouter(prefix="/{class_id}/homeworks", tags=["Homework"])
@@ -39,15 +37,9 @@ async def create_homework(
     payload: HomeworkCreate,
     actor: CurrentUserDep,
     service: HomeworkServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ):
-    return await execute_and_publish(
-        service.create(class_id, payload, actor, correlation_id),
-        service,
-        producer,
-        correlation_id,
-    )
+    return await service.create(class_id, payload, actor, correlation_id)
 
 
 @router.patch("/{homework_id}", response_model=HomeworkRead)
@@ -57,15 +49,9 @@ async def update_homework(
     payload: HomeworkUpdate,
     actor: CurrentUserDep,
     service: HomeworkServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ):
-    return await execute_and_publish(
-        service.update(class_id, homework_id, payload, actor),
-        service,
-        producer,
-        correlation_id,
-    )
+    return await service.update(class_id, homework_id, payload, actor, correlation_id)
 
 
 @router.delete("/{homework_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -74,15 +60,9 @@ async def delete_homework(
     homework_id: UUID,
     actor: CurrentUserDep,
     service: HomeworkServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ) -> Response:
-    await execute_and_publish(
-        service.delete(class_id, homework_id, actor),
-        service,
-        producer,
-        correlation_id,
-    )
+    await service.delete(class_id, homework_id, actor, correlation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

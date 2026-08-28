@@ -6,9 +6,7 @@ from app.api.dependencies import (
     ClassServiceDep,
     CorrelationIdDep,
     CurrentUserDep,
-    KafkaProducerDep,
 )
-from app.api.event_publishing import execute_and_publish
 from app.schemas import SchoolClassCreate, SchoolClassRead, SchoolClassUpdate
 
 from .days import router as days_router
@@ -26,15 +24,9 @@ async def create_class(
     payload: SchoolClassCreate,
     actor: CurrentUserDep,
     service: ClassServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ):
-    return await execute_and_publish(
-        service.create(payload, actor, correlation_id),
-        service,
-        producer,
-        correlation_id,
-    )
+    return await service.create(payload, actor, correlation_id)
 
 
 @router.get("", response_model=list[SchoolClassRead])
@@ -57,8 +49,9 @@ async def update_class(
     payload: SchoolClassUpdate,
     actor: CurrentUserDep,
     service: ClassServiceDep,
+    correlation_id: CorrelationIdDep = None,
 ):
-    return await service.update(class_id, payload, actor)
+    return await service.update(class_id, payload, actor, correlation_id)
 
 
 router.include_router(members_router)

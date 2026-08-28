@@ -43,7 +43,11 @@ class SchoolEventService(EventCollectingService):
         return entity
 
     async def create(
-        self, class_id: UUID, data: SchoolEventCreate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        data: SchoolEventCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> SchoolEventORM:
         logger.info("Creating school event: class_id=%s, type=%s", class_id, data.event_type)
         async with self.session.begin():
@@ -58,7 +62,7 @@ class SchoolEventService(EventCollectingService):
                 ends_at=data.ends_at,
                 created_by_telegram_id=actor.telegram_id,
             )
-            self._add_event("school_event.created", entity, actor)
+            self._add_event("school_event.created", entity, actor, correlation_id)
         logger.info(
             "school event created",
             extra={
@@ -70,7 +74,12 @@ class SchoolEventService(EventCollectingService):
         return entity
 
     async def update(
-        self, class_id: UUID, event_id: UUID, data: SchoolEventUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        event_id: UUID,
+        data: SchoolEventUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> SchoolEventORM:
         logger.info("Updating school event: class_id=%s, event_id=%s", class_id, event_id)
         async with self.session.begin():
@@ -81,7 +90,7 @@ class SchoolEventService(EventCollectingService):
             ends_at = changes.get("ends_at", entity.ends_at)
             self._validate_dates(starts_at, ends_at)
             entity = await self.repository.update(entity, changes)
-            self._add_event("school_event.updated", entity, actor)
+            self._add_event("school_event.updated", entity, actor, correlation_id)
         logger.info(
             "school event updated",
             extra={
@@ -92,13 +101,19 @@ class SchoolEventService(EventCollectingService):
         )
         return entity
 
-    async def delete(self, class_id: UUID, event_id: UUID, actor: CurrentUser) -> None:
+    async def delete(
+        self,
+        class_id: UUID,
+        event_id: UUID,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info("Deleting school event: class_id=%s, event_id=%s", class_id, event_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, event_id)
             await self.repository.delete(entity)
-            self._add_event("school_event.deleted", entity, actor)
+            self._add_event("school_event.deleted", entity, actor, correlation_id)
         logger.info(
             "school event deleted",
             extra={
@@ -123,7 +138,13 @@ class SchoolEventService(EventCollectingService):
             )
             raise InvalidSchoolEventDatesError()
 
-    def _add_event(self, event_type: str, entity: SchoolEventORM, actor: CurrentUser) -> None:
+    def _add_event(
+        self,
+        event_type: str,
+        entity: SchoolEventORM,
+        actor: CurrentUser,
+        correlation_id: str | None,
+    ) -> None:
         self.record_event(
             build_domain_event(
                 event_type=event_type,
@@ -131,6 +152,7 @@ class SchoolEventService(EventCollectingService):
                 aggregate_id=entity.id,
                 actor_telegram_id=actor.telegram_id,
                 class_id=entity.class_id,
+                correlation_id=correlation_id,
                 payload={"event_id": str(entity.id), "event_type": entity.event_type.value},
             )
         )

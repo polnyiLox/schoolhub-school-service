@@ -169,7 +169,12 @@ class HomeworkService(EventCollectingService):
         return entity
 
     async def update(
-        self, class_id: UUID, homework_id: UUID, data: HomeworkUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        homework_id: UUID,
+        data: HomeworkUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> HomeworkORM:
         logger.info("Updating homework: class_id=%s, homework_id=%s", class_id, homework_id)
         async with self.session.begin():
@@ -191,18 +196,24 @@ class HomeworkService(EventCollectingService):
                 )
             changes["updated_by_telegram_id"] = actor.telegram_id
             entity = await self.repository.update(entity, changes)
-            self._add_event("homework.updated", entity, actor)
+            self._add_event("homework.updated", entity, actor, correlation_id)
         await self._invalidate_homework(class_id, homework_id)
         logger.info("Homework updated: class_id=%s, homework_id=%s", class_id, homework_id)
         return entity
 
-    async def delete(self, class_id: UUID, homework_id: UUID, actor: CurrentUser) -> None:
+    async def delete(
+        self,
+        class_id: UUID,
+        homework_id: UUID,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info("Deleting homework: class_id=%s, homework_id=%s", class_id, homework_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, homework_id)
             await self.repository.delete(entity)
-            self._add_event("homework.deleted", entity, actor)
+            self._add_event("homework.deleted", entity, actor, correlation_id)
         await self._invalidate_homework(class_id, homework_id)
         logger.info("Homework deleted: class_id=%s, homework_id=%s", class_id, homework_id)
 

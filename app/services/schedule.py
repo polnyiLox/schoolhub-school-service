@@ -172,7 +172,11 @@ class ScheduleService(EventCollectingService):
         return result
 
     async def create_entry(
-        self, class_id: UUID, data: ScheduleEntryCreate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        data: ScheduleEntryCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> ScheduleEntryORM:
         logger.info(
             "Creating schedule entry: class_id=%s, weekday=%d, lesson=%d",
@@ -202,7 +206,9 @@ class ScheduleService(EventCollectingService):
                     end_time=data.end_time,
                     room=data.room,
                 )
-                self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
+                self._add_event(
+                    "schedule.created", "schedule", entity.id, class_id, actor, correlation_id
+                )
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -215,7 +221,12 @@ class ScheduleService(EventCollectingService):
         return entity
 
     async def update_entry(
-        self, class_id: UUID, entry_id: UUID, data: ScheduleEntryUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        entry_id: UUID,
+        data: ScheduleEntryUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> ScheduleEntryORM:
         logger.info("Updating schedule entry: class_id=%s, entry_id=%s", class_id, entry_id)
         self.access.require_admin(actor)
@@ -239,7 +250,9 @@ class ScheduleService(EventCollectingService):
                     )
                     raise ScheduleConflictError()
                 entity = await self.repository.update_entry(entity, changes)
-                self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
+                self._add_event(
+                    "schedule.updated", "schedule", entity.id, class_id, actor, correlation_id
+                )
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -251,18 +264,30 @@ class ScheduleService(EventCollectingService):
         logger.info("Schedule entry updated: class_id=%s, entry_id=%s", class_id, entry_id)
         return entity
 
-    async def delete_entry(self, class_id: UUID, entry_id: UUID, actor: CurrentUser) -> None:
+    async def delete_entry(
+        self,
+        class_id: UUID,
+        entry_id: UUID,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info("Deleting schedule entry: class_id=%s, entry_id=%s", class_id, entry_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_entry(class_id, entry_id)
             await self.repository.delete_entry(entity)
-            self._add_event("schedule.deleted", "schedule", entry_id, class_id, actor)
+            self._add_event(
+                "schedule.deleted", "schedule", entry_id, class_id, actor, correlation_id
+            )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry deleted: class_id=%s, entry_id=%s", class_id, entry_id)
 
     async def create_override(
-        self, class_id: UUID, data: ScheduleOverrideCreate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        data: ScheduleOverrideCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> ScheduleOverrideORM:
         logger.info(
             "Creating schedule override: class_id=%s, date=%s, lesson=%d",
@@ -303,6 +328,7 @@ class ScheduleService(EventCollectingService):
                     entity.id,
                     class_id,
                     actor,
+                    correlation_id,
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -316,7 +342,12 @@ class ScheduleService(EventCollectingService):
         return entity
 
     async def update_override(
-        self, class_id: UUID, override_id: UUID, data: ScheduleOverrideUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        override_id: UUID,
+        data: ScheduleOverrideUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> ScheduleOverrideORM:
         logger.info(
             "Updating schedule override: class_id=%s, override_id=%s", class_id, override_id
@@ -352,6 +383,7 @@ class ScheduleService(EventCollectingService):
                     entity.id,
                     class_id,
                     actor,
+                    correlation_id,
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -364,7 +396,13 @@ class ScheduleService(EventCollectingService):
         logger.info("Schedule override updated: class_id=%s, override_id=%s", class_id, override_id)
         return entity
 
-    async def delete_override(self, class_id: UUID, override_id: UUID, actor: CurrentUser) -> None:
+    async def delete_override(
+        self,
+        class_id: UUID,
+        override_id: UUID,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info(
             "Deleting schedule override: class_id=%s, override_id=%s", class_id, override_id
         )
@@ -373,7 +411,12 @@ class ScheduleService(EventCollectingService):
             entity = await self._get_override(class_id, override_id)
             await self.repository.delete_override(entity)
             self._add_event(
-                "schedule.override_deleted", "schedule_override", override_id, class_id, actor
+                "schedule.override_deleted",
+                "schedule_override",
+                override_id,
+                class_id,
+                actor,
+                correlation_id,
             )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override deleted: class_id=%s, override_id=%s", class_id, override_id)
@@ -448,6 +491,7 @@ class ScheduleService(EventCollectingService):
         aggregate_id: UUID,
         class_id: UUID,
         actor: CurrentUser,
+        correlation_id: str | None,
     ) -> None:
         self.record_event(
             build_domain_event(
@@ -456,6 +500,7 @@ class ScheduleService(EventCollectingService):
                 aggregate_id=aggregate_id,
                 actor_telegram_id=actor.telegram_id,
                 class_id=class_id,
+                correlation_id=correlation_id,
                 payload={"entity_id": str(aggregate_id)},
             )
         )

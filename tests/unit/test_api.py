@@ -11,7 +11,6 @@ from app.api.dependencies import (
     get_current_user,
     get_event_service,
     get_homework_service,
-    get_kafka_producer,
     get_member_service,
 )
 from app.db.models import HomeworkORM, SchoolClassORM
@@ -31,7 +30,6 @@ async def client():
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
         user_id=uuid4(), telegram_id=1, global_role=GlobalRole.ADMIN
     )
-    app.dependency_overrides[get_kafka_producer] = lambda: AsyncMock()
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as test_client:

@@ -2,8 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from app.api.dependencies import CorrelationIdDep, CurrentUserDep, EventServiceDep, KafkaProducerDep
-from app.api.event_publishing import execute_and_publish
+from app.api.dependencies import CorrelationIdDep, CurrentUserDep, EventServiceDep
 from app.schemas import SchoolEventCreate, SchoolEventRead, SchoolEventUpdate
 
 router = APIRouter(prefix="/{class_id}/events", tags=["School events"])
@@ -34,15 +33,9 @@ async def create_event(
     payload: SchoolEventCreate,
     actor: CurrentUserDep,
     service: EventServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ):
-    return await execute_and_publish(
-        service.create(class_id, payload, actor),
-        service,
-        producer,
-        correlation_id,
-    )
+    return await service.create(class_id, payload, actor, correlation_id)
 
 
 @router.patch("/{event_id}", response_model=SchoolEventRead)
@@ -52,15 +45,9 @@ async def update_event(
     payload: SchoolEventUpdate,
     actor: CurrentUserDep,
     service: EventServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ):
-    return await execute_and_publish(
-        service.update(class_id, event_id, payload, actor),
-        service,
-        producer,
-        correlation_id,
-    )
+    return await service.update(class_id, event_id, payload, actor, correlation_id)
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,13 +56,7 @@ async def delete_event(
     event_id: UUID,
     actor: CurrentUserDep,
     service: EventServiceDep,
-    producer: KafkaProducerDep,
     correlation_id: CorrelationIdDep = None,
 ) -> Response:
-    await execute_and_publish(
-        service.delete(class_id, event_id, actor),
-        service,
-        producer,
-        correlation_id,
-    )
+    await service.delete(class_id, event_id, actor, correlation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

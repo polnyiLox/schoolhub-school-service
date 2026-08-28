@@ -102,7 +102,11 @@ class SchoolClassService(EventCollectingService):
         return entity
 
     async def update(
-        self, class_id: UUID, data: SchoolClassUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        data: SchoolClassUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> SchoolClassORM:
         logger.info("Updating class: class_id=%s", class_id)
         self.access.require_admin(actor)
@@ -122,6 +126,7 @@ class SchoolClassService(EventCollectingService):
                     aggregate_id=entity.id,
                     actor_telegram_id=actor.telegram_id,
                     class_id=entity.id,
+                    correlation_id=correlation_id,
                     payload={"changed_fields": sorted(data.model_fields_set)},
                 )
             )
@@ -207,7 +212,12 @@ class ClassMemberService(EventCollectingService):
         return entity
 
     async def update(
-        self, class_id: UUID, telegram_id: int, data: ClassMemberUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        telegram_id: int,
+        data: ClassMemberUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> ClassMemberORM:
         logger.info("Updating class member: class_id=%s, telegram_id=%s", class_id, telegram_id)
         self.access.require_admin(actor)
@@ -226,6 +236,7 @@ class ClassMemberService(EventCollectingService):
                     aggregate_id=entity.id,
                     actor_telegram_id=actor.telegram_id,
                     class_id=class_id,
+                    correlation_id=correlation_id,
                     payload={"telegram_id": telegram_id, "role": entity.role.value},
                 )
             )
@@ -234,7 +245,13 @@ class ClassMemberService(EventCollectingService):
         )
         return entity
 
-    async def delete(self, class_id: UUID, telegram_id: int, actor: CurrentUser) -> None:
+    async def delete(
+        self,
+        class_id: UUID,
+        telegram_id: int,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info("Deleting class member: class_id=%s, telegram_id=%s", class_id, telegram_id)
         self.access.require_admin(actor)
         async with self.session.begin():
@@ -253,6 +270,7 @@ class ClassMemberService(EventCollectingService):
                     aggregate_id=entity_id,
                     actor_telegram_id=actor.telegram_id,
                     class_id=class_id,
+                    correlation_id=correlation_id,
                     payload={"telegram_id": telegram_id},
                 )
             )
@@ -281,7 +299,13 @@ class SubjectService(EventCollectingService):
         logger.info("Subjects listed: class_id=%s, count=%d", class_id, len(entities))
         return entities
 
-    async def create(self, class_id: UUID, data: SubjectCreate, actor: CurrentUser) -> SubjectORM:
+    async def create(
+        self,
+        class_id: UUID,
+        data: SubjectCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> SubjectORM:
         logger.info("Creating subject: class_id=%s", class_id)
         self.access.require_admin(actor)
         async with self.session.begin():
@@ -291,14 +315,19 @@ class SubjectService(EventCollectingService):
                 name=data.name,
                 teacher_name=data.teacher_name,
             )
-            self._add_event("subject.created", entity, actor)
+            self._add_event("subject.created", entity, actor, correlation_id)
         logger.info(
             "subject created", extra={"class_id": str(class_id), "subject_id": str(entity.id)}
         )
         return entity
 
     async def update(
-        self, class_id: UUID, subject_id: UUID, data: SubjectUpdate, actor: CurrentUser
+        self,
+        class_id: UUID,
+        subject_id: UUID,
+        data: SubjectUpdate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
     ) -> SubjectORM:
         logger.info("Updating subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
@@ -308,21 +337,27 @@ class SubjectService(EventCollectingService):
                 entity,
                 data.model_dump(exclude_unset=True),
             )
-            self._add_event("subject.updated", entity, actor)
+            self._add_event("subject.updated", entity, actor, correlation_id)
         await self._invalidate_schedule(class_id)
         logger.info(
             "subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)}
         )
         return entity
 
-    async def delete(self, class_id: UUID, subject_id: UUID, actor: CurrentUser) -> None:
+    async def delete(
+        self,
+        class_id: UUID,
+        subject_id: UUID,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
         logger.info("Deleting subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
         try:
             async with self.session.begin():
                 entity = await self._get_for_class(class_id, subject_id)
                 await self.repository.delete(entity)
-                self._add_event("subject.deleted", entity, actor)
+                self._add_event("subject.deleted", entity, actor, correlation_id)
         except IntegrityError as error:
             constraint_name = get_constraint_name(error)
             if constraint_name is None or not constraint_name.endswith("_subject_id_fkey"):
@@ -351,7 +386,13 @@ class SubjectService(EventCollectingService):
             raise SubjectDoesNotBelongToClassError()
         return entity
 
-    def _add_event(self, event_type: str, entity: SubjectORM, actor: CurrentUser) -> None:
+    def _add_event(
+        self,
+        event_type: str,
+        entity: SubjectORM,
+        actor: CurrentUser,
+        correlation_id: str | None,
+    ) -> None:
         self.record_event(
             build_domain_event(
                 event_type=event_type,
@@ -359,6 +400,7 @@ class SubjectService(EventCollectingService):
                 aggregate_id=entity.id,
                 actor_telegram_id=actor.telegram_id,
                 class_id=entity.class_id,
+                correlation_id=correlation_id,
                 payload={"subject_id": str(entity.id), "name": entity.name},
             )
         )

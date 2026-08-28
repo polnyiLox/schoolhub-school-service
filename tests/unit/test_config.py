@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import DataBaseSettings, KafkaSettings, RedisSettings
+from app.core.config import DataBaseSettings, KafkaSettings, OutboxSettings, RedisSettings
 
 
 def test_database_url_escapes_credentials_and_name() -> None:
@@ -27,6 +27,8 @@ def test_database_url_escapes_credentials_and_name() -> None:
         (RedisSettings, {"default_ttl_seconds": 0}),
         (KafkaSettings, {"acks": 1}),
         (KafkaSettings, {"request_timeout_ms": 999}),
+        (OutboxSettings, {"max_attempts": 0}),
+        (OutboxSettings, {"retry_base_seconds": 10, "retry_max_seconds": 5}),
     ],
 )
 def test_invalid_external_service_settings_are_rejected(settings_type, kwargs) -> None:

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,17 +9,25 @@ from app.api.routers.v1 import router as v1_router
 from app.broker import kafka_client
 from app.core.config import settings
 from app.core.health import router as health_router
+from app.core.logging import configure_logging
 from app.db.session import engine_dispose
 
 
+configure_logging()
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logger.info("Starting school-service")
     try:
         await kafka_client.connect_producer()
+        logger.info("School-service started")
         yield
     finally:
+        logger.info("Stopping school-service")
         await kafka_client.close_producer()
         await engine_dispose()
+        logger.info("School-service stopped")
 
 
 app = FastAPI(title="SchoolHub School Service", lifespan=lifespan)

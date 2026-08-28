@@ -111,8 +111,10 @@ def get_member_service(
     return ClassMemberService(session, repo, class_repo, access)
 
 
-def get_subject_service(session: SessionDep, repo: SubjectRepoDep, access: AccessDep) -> SubjectService:
-    return SubjectService(session, repo, access)
+def get_subject_service(
+    session: SessionDep, repo: SubjectRepoDep, access: AccessDep, cache: JsonCacheDep,
+) -> SubjectService:
+    return SubjectService(session, repo, access, cache)
 
 
 def get_schedule_service(

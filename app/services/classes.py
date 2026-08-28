@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import CacheNamespace, JsonCache
 from app.db.models import ClassMemberORM, SchoolClassORM, SubjectORM
 from app.enums import GlobalRole
 from app.exceptions import (
@@ -165,11 +166,18 @@ class ClassMemberService(EventCollectingService):
 
 
 class SubjectService(EventCollectingService):
-    def __init__(self, session: AsyncSession, repository: SubjectRepository, access: ClassAccessService) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        repository: SubjectRepository,
+        access: ClassAccessService,
+        cache: JsonCache | None = None,
+    ) -> None:
         super().__init__()
         self.session = session
         self.repository = repository
         self.access = access
+        self.cache = cache
 
     async def list(self, class_id: UUID, actor: CurrentUser) -> list[SubjectORM]:
         logger.info("Listing subjects: class_id=%s", class_id)
@@ -204,6 +212,7 @@ class SubjectService(EventCollectingService):
                 data.model_dump(exclude_unset=True),
             )
         self._add_event("subject.updated", entity, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)})
         return entity
 
@@ -214,6 +223,7 @@ class SubjectService(EventCollectingService):
             entity = await self._get_for_class(class_id, subject_id)
             await self.repository.delete(entity)
         self._add_event("subject.deleted", entity, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("subject deleted", extra={"class_id": str(class_id), "subject_id": str(subject_id)})
 
     async def _get_for_class(self, class_id: UUID, subject_id: UUID) -> SubjectORM:
@@ -232,3 +242,9 @@ class SubjectService(EventCollectingService):
             actor_telegram_id=actor.telegram_id, class_id=entity.class_id,
             payload={"subject_id": str(entity.id), "name": entity.name},
         ))
+
+    async def _invalidate_schedule(self, class_id: UUID) -> None:
+        if self.cache is None:
+            return
+        await self.cache.invalidate_pattern(CacheNamespace.SCHEDULE_DAY, class_id)
+        await self.cache.invalidate_pattern(CacheNamespace.SCHEDULE_WEEK, class_id)

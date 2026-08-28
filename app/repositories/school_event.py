@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import SchoolEventORM
@@ -36,8 +36,14 @@ class SchoolEventRepository:
             select(SchoolEventORM)
             .where(
                 SchoolEventORM.class_id == class_id,
-                SchoolEventORM.starts_at >= day_start,
                 SchoolEventORM.starts_at < day_end,
+                or_(
+                    and_(
+                        SchoolEventORM.ends_at.is_(None),
+                        SchoolEventORM.starts_at >= day_start,
+                    ),
+                    SchoolEventORM.ends_at > day_start,
+                ),
             )
             .order_by(SchoolEventORM.starts_at)
         )

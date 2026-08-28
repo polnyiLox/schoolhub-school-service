@@ -42,6 +42,7 @@ def class_entity():
 
 def service_mock() -> AsyncMock:
     service = AsyncMock()
+    service.get_pending_events = MagicMock(return_value=())
     service.drain_events = MagicMock(return_value=[])
     return service
 

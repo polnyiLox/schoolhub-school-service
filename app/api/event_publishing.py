@@ -15,7 +15,8 @@ async def execute_and_publish(
     """Execute a service operation and publish events created by that operation."""
     result = await operation
 
-    for event in service.drain_events():
+    for event in service.get_pending_events():
         await producer.publish(event)
 
+    service.drain_events()
     return result

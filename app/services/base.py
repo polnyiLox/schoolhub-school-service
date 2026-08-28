@@ -11,3 +11,6 @@ class EventCollectingService:
         events = self.pending_events.copy()
         self.pending_events.clear()
         return events
+
+    def get_pending_events(self) -> tuple[DomainEvent, ...]:
+        return tuple(self.pending_events)

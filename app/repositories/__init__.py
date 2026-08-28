@@ -1,5 +1,6 @@
 from .class_member import ClassMemberRepository
 from .homework import HomeworkRepository
+from .outbox import OutboxRepository
 from .schedule import ScheduleRepository
 from .school_class import SchoolClassRepository
 from .school_event import SchoolEventRepository

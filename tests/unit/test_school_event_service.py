@@ -3,12 +3,22 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app.db.models import SchoolEventORM
 from app.enums import SchoolEventType
 from app.exceptions import InvalidSchoolEventDatesError, SchoolEventNotFoundError
 from app.schemas import SchoolEventCreate, SchoolEventUpdate
 from app.services import SchoolEventService
+
+
+def test_event_rejects_naive_datetime() -> None:
+    with pytest.raises(ValidationError):
+        SchoolEventCreate(
+            title="Exam",
+            event_type=SchoolEventType.EXAM,
+            starts_at=datetime(2026, 9, 14, 9),
+        )
 
 
 @pytest.mark.asyncio

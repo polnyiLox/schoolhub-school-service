@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class SchoolEventService(EventCollectingService):
-    def __init__(self, session: AsyncSession, repository: SchoolEventRepository, access: ClassAccessService) -> None:
+    def __init__(
+        self, session: AsyncSession, repository: SchoolEventRepository, access: ClassAccessService
+    ) -> None:
         super().__init__()
         self.session = session
         self.repository = repository
@@ -36,7 +38,9 @@ class SchoolEventService(EventCollectingService):
         logger.info("School event retrieved: class_id=%s, event_id=%s", class_id, event_id)
         return entity
 
-    async def create(self, class_id: UUID, data: SchoolEventCreate, actor: CurrentUser) -> SchoolEventORM:
+    async def create(
+        self, class_id: UUID, data: SchoolEventCreate, actor: CurrentUser
+    ) -> SchoolEventORM:
         logger.info("Creating school event: class_id=%s, type=%s", class_id, data.event_type)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
@@ -51,10 +55,19 @@ class SchoolEventService(EventCollectingService):
                 created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("school_event.created", entity, actor)
-        logger.info("school event created", extra={"class_id": str(class_id), "event_id": str(entity.id), "telegram_id": actor.telegram_id})
+        logger.info(
+            "school event created",
+            extra={
+                "class_id": str(class_id),
+                "event_id": str(entity.id),
+                "telegram_id": actor.telegram_id,
+            },
+        )
         return entity
 
-    async def update(self, class_id: UUID, event_id: UUID, data: SchoolEventUpdate, actor: CurrentUser) -> SchoolEventORM:
+    async def update(
+        self, class_id: UUID, event_id: UUID, data: SchoolEventUpdate, actor: CurrentUser
+    ) -> SchoolEventORM:
         logger.info("Updating school event: class_id=%s, event_id=%s", class_id, event_id)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
@@ -65,7 +78,14 @@ class SchoolEventService(EventCollectingService):
             self._validate_dates(starts_at, ends_at)
             entity = await self.repository.update(entity, changes)
         self._add_event("school_event.updated", entity, actor)
-        logger.info("school event updated", extra={"class_id": str(class_id), "event_id": str(event_id), "telegram_id": actor.telegram_id})
+        logger.info(
+            "school event updated",
+            extra={
+                "class_id": str(class_id),
+                "event_id": str(event_id),
+                "telegram_id": actor.telegram_id,
+            },
+        )
         return entity
 
     async def delete(self, class_id: UUID, event_id: UUID, actor: CurrentUser) -> None:
@@ -75,7 +95,14 @@ class SchoolEventService(EventCollectingService):
             entity = await self._get_for_class(class_id, event_id)
             await self.repository.delete(entity)
         self._add_event("school_event.deleted", entity, actor)
-        logger.info("school event deleted", extra={"class_id": str(class_id), "event_id": str(event_id), "telegram_id": actor.telegram_id})
+        logger.info(
+            "school event deleted",
+            extra={
+                "class_id": str(class_id),
+                "event_id": str(event_id),
+                "telegram_id": actor.telegram_id,
+            },
+        )
 
     async def _get_for_class(self, class_id: UUID, event_id: UUID) -> SchoolEventORM:
         entity = await self.repository.get_by_id(event_id)
@@ -87,12 +114,19 @@ class SchoolEventService(EventCollectingService):
     @staticmethod
     def _validate_dates(starts_at: datetime, ends_at: datetime | None) -> None:
         if ends_at is not None and ends_at < starts_at:
-            logger.warning("Invalid school event dates: starts_at=%s, ends_at=%s", starts_at, ends_at)
+            logger.warning(
+                "Invalid school event dates: starts_at=%s, ends_at=%s", starts_at, ends_at
+            )
             raise InvalidSchoolEventDatesError()
 
     def _add_event(self, event_type: str, entity: SchoolEventORM, actor: CurrentUser) -> None:
-        self.pending_events.append(build_domain_event(
-            event_type=event_type, aggregate_type="school_event", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=entity.class_id,
-            payload={"event_id": str(entity.id), "event_type": entity.event_type.value},
-        ))
+        self.pending_events.append(
+            build_domain_event(
+                event_type=event_type,
+                aggregate_type="school_event",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=entity.class_id,
+                payload={"event_id": str(entity.id), "event_type": entity.event_type.value},
+            )
+        )

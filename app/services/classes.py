@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import CacheNamespace, JsonCache
-from app.db.models import ClassMemberORM, SchoolClassORM, SubjectORM
 from app.db.integrity import get_constraint_name
+from app.db.models import ClassMemberORM, SchoolClassORM, SubjectORM
 from app.enums import GlobalRole
 from app.exceptions import (
     ClassMemberAlreadyExistsError,
@@ -42,7 +42,9 @@ class SchoolClassService(EventCollectingService):
         self.repository = repository
         self.access = access
 
-    async def create(self, data: SchoolClassCreate, actor: CurrentUser, correlation_id: str | None = None) -> SchoolClassORM:
+    async def create(
+        self, data: SchoolClassCreate, actor: CurrentUser, correlation_id: str | None = None
+    ) -> SchoolClassORM:
         logger.info("Creating class: academic_year=%s", data.academic_year)
         self.access.require_admin(actor)
         async with self.session.begin():
@@ -50,12 +52,25 @@ class SchoolClassService(EventCollectingService):
                 name=data.name,
                 academic_year=data.academic_year,
             )
-        self.pending_events.append(build_domain_event(
-            event_type="class.created", aggregate_type="class", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=entity.id, correlation_id=correlation_id,
-            payload={"name": entity.name, "academic_year": entity.academic_year},
-        ))
-        logger.info("class created", extra={"class_id": str(entity.id), "telegram_id": actor.telegram_id, "correlation_id": correlation_id})
+        self.pending_events.append(
+            build_domain_event(
+                event_type="class.created",
+                aggregate_type="class",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=entity.id,
+                correlation_id=correlation_id,
+                payload={"name": entity.name, "academic_year": entity.academic_year},
+            )
+        )
+        logger.info(
+            "class created",
+            extra={
+                "class_id": str(entity.id),
+                "telegram_id": actor.telegram_id,
+                "correlation_id": correlation_id,
+            },
+        )
         return entity
 
     async def list(self, actor: CurrentUser) -> list[SchoolClassORM]:
@@ -77,7 +92,9 @@ class SchoolClassService(EventCollectingService):
         logger.info("Class retrieved: class_id=%s", class_id)
         return entity
 
-    async def update(self, class_id: UUID, data: SchoolClassUpdate, actor: CurrentUser) -> SchoolClassORM:
+    async def update(
+        self, class_id: UUID, data: SchoolClassUpdate, actor: CurrentUser
+    ) -> SchoolClassORM:
         logger.info("Updating class: class_id=%s", class_id)
         self.access.require_admin(actor)
         async with self.session.begin():
@@ -89,14 +106,19 @@ class SchoolClassService(EventCollectingService):
                 entity,
                 data.model_dump(exclude_unset=True),
             )
-        logger.info("class updated", extra={"class_id": str(class_id), "telegram_id": actor.telegram_id})
+        logger.info(
+            "class updated", extra={"class_id": str(class_id), "telegram_id": actor.telegram_id}
+        )
         return entity
 
 
 class ClassMemberService(EventCollectingService):
     def __init__(
-        self, session: AsyncSession, repository: ClassMemberRepository,
-        class_repository: SchoolClassRepository, access: ClassAccessService,
+        self,
+        session: AsyncSession,
+        repository: ClassMemberRepository,
+        class_repository: SchoolClassRepository,
+        access: ClassAccessService,
     ) -> None:
         super().__init__()
         self.session = session
@@ -111,16 +133,28 @@ class ClassMemberService(EventCollectingService):
         logger.info("Class members listed: class_id=%s, count=%d", class_id, len(entities))
         return entities
 
-    async def add(self, class_id: UUID, data: ClassMemberCreate, actor: CurrentUser, correlation_id: str | None = None) -> ClassMemberORM:
+    async def add(
+        self,
+        class_id: UUID,
+        data: ClassMemberCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> ClassMemberORM:
         logger.info("Adding class member: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
         self.access.require_admin(actor)
         try:
             async with self.session.begin():
                 if await self.class_repository.get_by_id(class_id) is None:
-                    logger.warning("Cannot add member because class was not found: class_id=%s", class_id)
+                    logger.warning(
+                        "Cannot add member because class was not found: class_id=%s", class_id
+                    )
                     raise ClassNotFoundError()
                 if await self.repository.get(class_id, data.telegram_id) is not None:
-                    logger.warning("Class member already exists: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
+                    logger.warning(
+                        "Class member already exists: class_id=%s, telegram_id=%s",
+                        class_id,
+                        data.telegram_id,
+                    )
                     raise ClassMemberAlreadyExistsError()
                 entity = await self.repository.create(
                     class_id=class_id,
@@ -136,29 +170,48 @@ class ClassMemberService(EventCollectingService):
                 data.telegram_id,
             )
             raise ClassMemberAlreadyExistsError() from error
-        self.pending_events.append(build_domain_event(
-            event_type="class.member_added", aggregate_type="class_member", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=class_id, correlation_id=correlation_id,
-            payload={"telegram_id": entity.telegram_id, "role": entity.role.value},
-        ))
-        logger.info("member added", extra={"class_id": str(class_id), "telegram_id": data.telegram_id})
+        self.pending_events.append(
+            build_domain_event(
+                event_type="class.member_added",
+                aggregate_type="class_member",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=class_id,
+                correlation_id=correlation_id,
+                payload={"telegram_id": entity.telegram_id, "role": entity.role.value},
+            )
+        )
+        logger.info(
+            "member added", extra={"class_id": str(class_id), "telegram_id": data.telegram_id}
+        )
         return entity
 
-    async def update(self, class_id: UUID, telegram_id: int, data: ClassMemberUpdate, actor: CurrentUser) -> ClassMemberORM:
+    async def update(
+        self, class_id: UUID, telegram_id: int, data: ClassMemberUpdate, actor: CurrentUser
+    ) -> ClassMemberORM:
         logger.info("Updating class member: class_id=%s, telegram_id=%s", class_id, telegram_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self.repository.get(class_id, telegram_id)
             if entity is None:
-                logger.warning("Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id)
+                logger.warning(
+                    "Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id
+                )
                 raise ClassMemberNotFoundError()
             entity = await self.repository.update(entity, data.model_dump())
-        self.pending_events.append(build_domain_event(
-            event_type="class.member_role_changed", aggregate_type="class_member", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=class_id,
-            payload={"telegram_id": telegram_id, "role": entity.role.value},
-        ))
-        logger.info("member role changed", extra={"class_id": str(class_id), "telegram_id": telegram_id})
+        self.pending_events.append(
+            build_domain_event(
+                event_type="class.member_role_changed",
+                aggregate_type="class_member",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=class_id,
+                payload={"telegram_id": telegram_id, "role": entity.role.value},
+            )
+        )
+        logger.info(
+            "member role changed", extra={"class_id": str(class_id), "telegram_id": telegram_id}
+        )
         return entity
 
     async def delete(self, class_id: UUID, telegram_id: int, actor: CurrentUser) -> None:
@@ -167,14 +220,22 @@ class ClassMemberService(EventCollectingService):
         async with self.session.begin():
             entity = await self.repository.get(class_id, telegram_id)
             if entity is None:
-                logger.warning("Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id)
+                logger.warning(
+                    "Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id
+                )
                 raise ClassMemberNotFoundError()
             entity_id = entity.id
             await self.repository.delete(entity)
-        self.pending_events.append(build_domain_event(
-            event_type="class.member_removed", aggregate_type="class_member", aggregate_id=entity_id,
-            actor_telegram_id=actor.telegram_id, class_id=class_id, payload={"telegram_id": telegram_id},
-        ))
+        self.pending_events.append(
+            build_domain_event(
+                event_type="class.member_removed",
+                aggregate_type="class_member",
+                aggregate_id=entity_id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=class_id,
+                payload={"telegram_id": telegram_id},
+            )
+        )
         logger.info("member removed", extra={"class_id": str(class_id), "telegram_id": telegram_id})
 
 
@@ -210,10 +271,14 @@ class SubjectService(EventCollectingService):
                 teacher_name=data.teacher_name,
             )
         self._add_event("subject.created", entity, actor)
-        logger.info("subject created", extra={"class_id": str(class_id), "subject_id": str(entity.id)})
+        logger.info(
+            "subject created", extra={"class_id": str(class_id), "subject_id": str(entity.id)}
+        )
         return entity
 
-    async def update(self, class_id: UUID, subject_id: UUID, data: SubjectUpdate, actor: CurrentUser) -> SubjectORM:
+    async def update(
+        self, class_id: UUID, subject_id: UUID, data: SubjectUpdate, actor: CurrentUser
+    ) -> SubjectORM:
         logger.info("Updating subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
         async with self.session.begin():
@@ -224,7 +289,9 @@ class SubjectService(EventCollectingService):
             )
         self._add_event("subject.updated", entity, actor)
         await self._invalidate_schedule(class_id)
-        logger.info("subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)})
+        logger.info(
+            "subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)}
+        )
         return entity
 
     async def delete(self, class_id: UUID, subject_id: UUID, actor: CurrentUser) -> None:
@@ -247,7 +314,9 @@ class SubjectService(EventCollectingService):
             raise SubjectInUseError() from error
         self._add_event("subject.deleted", entity, actor)
         await self._invalidate_schedule(class_id)
-        logger.info("subject deleted", extra={"class_id": str(class_id), "subject_id": str(subject_id)})
+        logger.info(
+            "subject deleted", extra={"class_id": str(class_id), "subject_id": str(subject_id)}
+        )
 
     async def _get_for_class(self, class_id: UUID, subject_id: UUID) -> SubjectORM:
         entity = await self.repository.get_by_id(subject_id)
@@ -255,16 +324,23 @@ class SubjectService(EventCollectingService):
             logger.warning("Subject not found: class_id=%s, subject_id=%s", class_id, subject_id)
             raise SubjectNotFoundError()
         if entity.class_id != class_id:
-            logger.warning("Subject belongs to another class: class_id=%s, subject_id=%s", class_id, subject_id)
+            logger.warning(
+                "Subject belongs to another class: class_id=%s, subject_id=%s", class_id, subject_id
+            )
             raise SubjectDoesNotBelongToClassError()
         return entity
 
     def _add_event(self, event_type: str, entity: SubjectORM, actor: CurrentUser) -> None:
-        self.pending_events.append(build_domain_event(
-            event_type=event_type, aggregate_type="subject", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=entity.class_id,
-            payload={"subject_id": str(entity.id), "name": entity.name},
-        ))
+        self.pending_events.append(
+            build_domain_event(
+                event_type=event_type,
+                aggregate_type="subject",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=entity.class_id,
+                payload={"subject_id": str(entity.id), "name": entity.name},
+            )
+        )
 
     async def _invalidate_schedule(self, class_id: UUID) -> None:
         if self.cache is None:

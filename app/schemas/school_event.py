@@ -17,9 +17,7 @@ class SchoolEventCreate(BaseModel):
 
 
 class SchoolEventUpdate(NonEmptyUpdateModel):
-    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
-        {"title", "event_type", "starts_at"}
-    )
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"title", "event_type", "starts_at"})
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     event_type: SchoolEventType | None = None

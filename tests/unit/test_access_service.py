@@ -12,7 +12,9 @@ from app.services import ClassAccessService
 @pytest.mark.asyncio
 async def test_admin_is_allowed_without_membership(admin):
     classes = AsyncMock()
-    classes.get_by_id.return_value = SchoolClassORM(id=uuid4(), name="10A", academic_year="2026/2027")
+    classes.get_by_id.return_value = SchoolClassORM(
+        id=uuid4(), name="10A", academic_year="2026/2027"
+    )
     members = AsyncMock()
     service = ClassAccessService(classes, members)
     assert await service.require_member(uuid4(), admin) is None
@@ -22,15 +24,25 @@ async def test_admin_is_allowed_without_membership(admin):
 @pytest.mark.asyncio
 async def test_existing_student_is_member(user):
     class_id = uuid4()
-    member = ClassMemberORM(class_id=class_id, telegram_id=user.telegram_id, role=ClassMemberRole.STUDENT)
-    classes = AsyncMock(get_by_id=AsyncMock(return_value=SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")))
+    member = ClassMemberORM(
+        class_id=class_id, telegram_id=user.telegram_id, role=ClassMemberRole.STUDENT
+    )
+    classes = AsyncMock(
+        get_by_id=AsyncMock(
+            return_value=SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")
+        )
+    )
     members = AsyncMock(get=AsyncMock(return_value=member))
     assert await ClassAccessService(classes, members).require_member(class_id, user) is member
 
 
 @pytest.mark.asyncio
 async def test_user_from_another_class_is_denied(user):
-    classes = AsyncMock(get_by_id=AsyncMock(return_value=SchoolClassORM(id=uuid4(), name="10A", academic_year="2026/2027")))
+    classes = AsyncMock(
+        get_by_id=AsyncMock(
+            return_value=SchoolClassORM(id=uuid4(), name="10A", academic_year="2026/2027")
+        )
+    )
     members = AsyncMock(get=AsyncMock(return_value=None))
     with pytest.raises(ClassAccessDeniedError):
         await ClassAccessService(classes, members).require_member(uuid4(), user)
@@ -39,8 +51,14 @@ async def test_user_from_another_class_is_denied(user):
 @pytest.mark.asyncio
 async def test_student_cannot_edit(user):
     class_id = uuid4()
-    member = ClassMemberORM(class_id=class_id, telegram_id=user.telegram_id, role=ClassMemberRole.STUDENT)
-    classes = AsyncMock(get_by_id=AsyncMock(return_value=SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")))
+    member = ClassMemberORM(
+        class_id=class_id, telegram_id=user.telegram_id, role=ClassMemberRole.STUDENT
+    )
+    classes = AsyncMock(
+        get_by_id=AsyncMock(
+            return_value=SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")
+        )
+    )
     members = AsyncMock(get=AsyncMock(return_value=member))
     with pytest.raises(ClassAccessDeniedError):
         await ClassAccessService(classes, members).require_editor(class_id, user)

@@ -33,8 +33,11 @@ homework_history_adapter = TypeAdapter(list[HomeworkRevisionRead])
 
 class HomeworkService(EventCollectingService):
     def __init__(
-        self, session: AsyncSession, repository: HomeworkRepository,
-        subject_repository: SubjectRepository, access: ClassAccessService,
+        self,
+        session: AsyncSession,
+        repository: HomeworkRepository,
+        subject_repository: SubjectRepository,
+        access: ClassAccessService,
         cache: JsonCache | None = None,
     ) -> None:
         super().__init__()
@@ -81,7 +84,9 @@ class HomeworkService(EventCollectingService):
                 adapter=homework_adapter,
             )
             if cached is not None:
-                logger.info("Homework retrieved: class_id=%s, homework_id=%s", class_id, homework_id)
+                logger.info(
+                    "Homework retrieved: class_id=%s, homework_id=%s", class_id, homework_id
+                )
                 return cached
 
         logger.debug("Loading homework from database: homework_id=%s", homework_id)
@@ -113,7 +118,11 @@ class HomeworkService(EventCollectingService):
                 adapter=homework_history_adapter,
             )
             if cached is not None:
-                logger.info("Homework history retrieved: homework_id=%s, revisions=%d", homework_id, len(cached))
+                logger.info(
+                    "Homework history retrieved: homework_id=%s, revisions=%d",
+                    homework_id,
+                    len(cached),
+                )
                 return cached
 
         logger.debug("Loading homework revisions from database: homework_id=%s", homework_id)
@@ -128,10 +137,18 @@ class HomeworkService(EventCollectingService):
                 homework_id,
                 adapter=homework_history_adapter,
             )
-        logger.info("Homework history retrieved: homework_id=%s, revisions=%d", homework_id, len(result))
+        logger.info(
+            "Homework history retrieved: homework_id=%s, revisions=%d", homework_id, len(result)
+        )
         return result
 
-    async def create(self, class_id: UUID, data: HomeworkCreate, actor: CurrentUser, correlation_id: str | None = None) -> HomeworkORM:
+    async def create(
+        self,
+        class_id: UUID,
+        data: HomeworkCreate,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> HomeworkORM:
         logger.info("Creating homework: class_id=%s, subject_id=%s", class_id, data.subject_id)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
@@ -150,7 +167,9 @@ class HomeworkService(EventCollectingService):
         logger.info("Homework created: class_id=%s, homework_id=%s", class_id, entity.id)
         return entity
 
-    async def update(self, class_id: UUID, homework_id: UUID, data: HomeworkUpdate, actor: CurrentUser) -> HomeworkORM:
+    async def update(
+        self, class_id: UUID, homework_id: UUID, data: HomeworkUpdate, actor: CurrentUser
+    ) -> HomeworkORM:
         logger.info("Updating homework: class_id=%s, homework_id=%s", class_id, homework_id)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
@@ -196,27 +215,49 @@ class HomeworkService(EventCollectingService):
     async def _require_subject(self, class_id: UUID, subject_id: UUID) -> None:
         subject = await self.subject_repository.get_by_id(subject_id)
         if subject is None:
-            logger.warning("Homework subject not found: class_id=%s, subject_id=%s", class_id, subject_id)
+            logger.warning(
+                "Homework subject not found: class_id=%s, subject_id=%s", class_id, subject_id
+            )
             raise SubjectNotFoundError()
         if subject.class_id != class_id:
-            logger.warning("Homework subject belongs to another class: class_id=%s, subject_id=%s", class_id, subject_id)
+            logger.warning(
+                "Homework subject belongs to another class: class_id=%s, subject_id=%s",
+                class_id,
+                subject_id,
+            )
             raise SubjectDoesNotBelongToClassError()
 
     @staticmethod
     def _validate_dates(assigned_date: date, due_date: date) -> None:
         if due_date < assigned_date:
-            logger.warning("Invalid homework dates: assigned_date=%s, due_date=%s", assigned_date, due_date)
+            logger.warning(
+                "Invalid homework dates: assigned_date=%s, due_date=%s", assigned_date, due_date
+            )
             raise InvalidHomeworkDatesError()
 
-    def _add_event(self, event_type: str, entity: HomeworkORM, actor: CurrentUser, correlation_id: str | None = None) -> None:
-        self.pending_events.append(build_domain_event(
-            event_type=event_type, aggregate_type="homework", aggregate_id=entity.id,
-            actor_telegram_id=actor.telegram_id, class_id=entity.class_id, correlation_id=correlation_id,
-            payload={
-                "homework_id": str(entity.id), "subject_id": str(entity.subject_id),
-                "assigned_date": entity.assigned_date.isoformat(), "due_date": entity.due_date.isoformat(),
-            },
-        ))
+    def _add_event(
+        self,
+        event_type: str,
+        entity: HomeworkORM,
+        actor: CurrentUser,
+        correlation_id: str | None = None,
+    ) -> None:
+        self.pending_events.append(
+            build_domain_event(
+                event_type=event_type,
+                aggregate_type="homework",
+                aggregate_id=entity.id,
+                actor_telegram_id=actor.telegram_id,
+                class_id=entity.class_id,
+                correlation_id=correlation_id,
+                payload={
+                    "homework_id": str(entity.id),
+                    "subject_id": str(entity.subject_id),
+                    "assigned_date": entity.assigned_date.isoformat(),
+                    "due_date": entity.due_date.isoformat(),
+                },
+            )
+        )
 
     async def _invalidate_homework_list(self, class_id: UUID) -> None:
         if self.cache is not None:

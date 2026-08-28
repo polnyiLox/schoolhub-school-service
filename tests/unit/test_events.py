@@ -5,8 +5,12 @@ from app.schemas import build_domain_event
 
 def build(event_type: str = "homework.created"):
     return build_domain_event(
-        event_type=event_type, aggregate_type="homework", aggregate_id=uuid4(),
-        actor_telegram_id=42, class_id=uuid4(), correlation_id="request-1",
+        event_type=event_type,
+        aggregate_type="homework",
+        aggregate_id=uuid4(),
+        actor_telegram_id=42,
+        class_id=uuid4(),
+        correlation_id="request-1",
         payload={"subject_id": "subject"},
     )
 

@@ -1,13 +1,10 @@
 from collections.abc import Awaitable
-from typing import TypeVar
 
 from app.broker import KafkaProducer
 from app.services.base import EventCollectingService
 
-ResultT = TypeVar("ResultT")
 
-
-async def execute_and_publish(
+async def execute_and_publish[ResultT](
     operation: Awaitable[ResultT],
     service: EventCollectingService,
     producer: KafkaProducer,

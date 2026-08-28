@@ -16,7 +16,12 @@ from app.api.dependencies import (
 )
 from app.db.models import HomeworkORM, SchoolClassORM
 from app.enums import GlobalRole
-from app.exceptions import ClassAccessDeniedError, ClassMemberAlreadyExistsError, HomeworkNotFoundError, InvalidSchoolEventDatesError
+from app.exceptions import (
+    ClassAccessDeniedError,
+    ClassMemberAlreadyExistsError,
+    HomeworkNotFoundError,
+    InvalidSchoolEventDatesError,
+)
 from app.main import app
 from app.schemas import CurrentUser
 
@@ -27,7 +32,9 @@ async def client():
         user_id=uuid4(), telegram_id=1, global_role=GlobalRole.ADMIN
     )
     app.dependency_overrides[get_kafka_producer] = lambda: AsyncMock()
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as test_client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 
@@ -35,8 +42,12 @@ async def client():
 def class_entity():
     now = datetime.now(UTC)
     return SchoolClassORM(
-        id=uuid4(), name="10A", academic_year="2026/2027", is_archived=False,
-        created_at=now, updated_at=now,
+        id=uuid4(),
+        name="10A",
+        academic_year="2026/2027",
+        is_archived=False,
+        created_at=now,
+        updated_at=now,
     )
 
 
@@ -93,7 +104,9 @@ async def test_duplicate_member_maps_to_409(client):
     service = service_mock()
     service.add.side_effect = ClassMemberAlreadyExistsError()
     app.dependency_overrides[get_member_service] = lambda: service
-    response = await client.post(f"/v1/classes/{uuid4()}/members", json={"telegram_id": 20, "role": "student"})
+    response = await client.post(
+        f"/v1/classes/{uuid4()}/members", json={"telegram_id": 20, "role": "student"}
+    )
     assert response.status_code == 409
 
 
@@ -111,9 +124,16 @@ async def test_homework_response_uses_read_schema(client):
     service = service_mock()
     now = datetime.now(UTC)
     entity = HomeworkORM(
-        id=uuid4(), class_id=uuid4(), subject_id=uuid4(), assigned_date=date(2026, 9, 14),
-        due_date=date(2026, 9, 15), text="Task", created_by_telegram_id=1,
-        updated_by_telegram_id=None, created_at=now, updated_at=now,
+        id=uuid4(),
+        class_id=uuid4(),
+        subject_id=uuid4(),
+        assigned_date=date(2026, 9, 14),
+        due_date=date(2026, 9, 15),
+        text="Task",
+        created_by_telegram_id=1,
+        updated_by_telegram_id=None,
+        created_at=now,
+        updated_at=now,
     )
     service.get.return_value = entity
     app.dependency_overrides[get_homework_service] = lambda: service

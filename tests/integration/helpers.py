@@ -20,7 +20,9 @@ async def create_subject(session: AsyncSession, class_id, name: str = "Math") ->
     return entity
 
 
-async def create_member(session: AsyncSession, class_id, telegram_id: int, role=ClassMemberRole.STUDENT) -> ClassMemberORM:
+async def create_member(
+    session: AsyncSession, class_id, telegram_id: int, role=ClassMemberRole.STUDENT
+) -> ClassMemberORM:
     entity = ClassMemberORM(class_id=class_id, telegram_id=telegram_id, role=role)
     session.add(entity)
     await session.flush()

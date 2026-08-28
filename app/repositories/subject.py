@@ -16,11 +16,7 @@ class SubjectRepository:
         return await self.session.scalar(query)
 
     async def list(self, class_id: UUID) -> list[SubjectORM]:
-        query = (
-            select(SubjectORM)
-            .where(SubjectORM.class_id == class_id)
-            .order_by(SubjectORM.name)
-        )
+        query = select(SubjectORM).where(SubjectORM.class_id == class_id).order_by(SubjectORM.name)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 

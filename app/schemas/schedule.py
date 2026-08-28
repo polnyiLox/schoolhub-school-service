@@ -19,7 +19,7 @@ class ScheduleEntryCreate(BaseModel):
     room: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
-    def validate_time_order(self) -> "ScheduleEntryCreate":
+    def validate_time_order(self) -> ScheduleEntryCreate:
         if self.start_time >= self.end_time:
             raise ValueError("start_time must be earlier than end_time")
         return self

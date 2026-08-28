@@ -28,7 +28,9 @@ async def test_kafka_client_connects_only_once():
     raw_producer.start = AsyncMock()
     raw_producer.stop = AsyncMock()
 
-    with patch("app.broker.kafka_client.AIOKafkaProducer", return_value=raw_producer) as producer_class:
+    with patch(
+        "app.broker.kafka_client.AIOKafkaProducer", return_value=raw_producer
+    ) as producer_class:
         client = KafkaClient(KafkaSettings())
         await client.connect_producer()
         await client.connect_producer()

@@ -19,8 +19,13 @@ class DomainEvent(BaseModel):
 
 
 def build_domain_event(
-    *, event_type: str, aggregate_type: str, aggregate_id: UUID,
-    actor_telegram_id: int, class_id: UUID, correlation_id: str | None = None,
+    *,
+    event_type: str,
+    aggregate_type: str,
+    aggregate_id: UUID,
+    actor_telegram_id: int,
+    class_id: UUID,
+    correlation_id: str | None = None,
     payload: dict[str, Any] | None = None,
 ) -> DomainEvent:
     """Build an event payload. Publishing is intentionally outside this service."""

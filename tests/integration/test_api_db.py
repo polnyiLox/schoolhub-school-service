@@ -1,10 +1,10 @@
 from datetime import date
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock
 
 from app.api.dependencies import get_kafka_producer
 from app.db.session import get_session
@@ -28,7 +28,9 @@ async def api_client(session):
 
     app.dependency_overrides[get_session] = session_override
     app.dependency_overrides[get_kafka_producer] = lambda: AsyncMock()
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
         yield client
     app.dependency_overrides.clear()
 
@@ -53,8 +55,10 @@ async def test_create_homework_api_to_real_postgres(api_client, session):
     response = await api_client.post(
         f"/v1/classes/{school_class.id}/homeworks",
         json={
-            "subject_id": str(subject.id), "assigned_date": str(date(2026, 9, 14)),
-            "due_date": str(date(2026, 9, 15)), "text": "Exercises 1-5",
+            "subject_id": str(subject.id),
+            "assigned_date": str(date(2026, 9, 14)),
+            "due_date": str(date(2026, 9, 15)),
+            "text": "Exercises 1-5",
         },
         headers=headers(20),
     )

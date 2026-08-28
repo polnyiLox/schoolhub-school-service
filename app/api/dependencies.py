@@ -101,7 +101,9 @@ def get_access_service(class_repo: ClassRepoDep, member_repo: MemberRepoDep) -> 
 AccessDep = Annotated[ClassAccessService, Depends(get_access_service)]
 
 
-def get_class_service(session: SessionDep, repo: ClassRepoDep, access: AccessDep) -> SchoolClassService:
+def get_class_service(
+    session: SessionDep, repo: ClassRepoDep, access: AccessDep
+) -> SchoolClassService:
     return SchoolClassService(session, repo, access)
 
 
@@ -112,26 +114,37 @@ def get_member_service(
 
 
 def get_subject_service(
-    session: SessionDep, repo: SubjectRepoDep, access: AccessDep, cache: JsonCacheDep,
+    session: SessionDep,
+    repo: SubjectRepoDep,
+    access: AccessDep,
+    cache: JsonCacheDep,
 ) -> SubjectService:
     return SubjectService(session, repo, access, cache)
 
 
 def get_schedule_service(
-    session: SessionDep, repo: ScheduleRepoDep, subject_repo: SubjectRepoDep,
-    access: AccessDep, cache: JsonCacheDep,
+    session: SessionDep,
+    repo: ScheduleRepoDep,
+    subject_repo: SubjectRepoDep,
+    access: AccessDep,
+    cache: JsonCacheDep,
 ) -> ScheduleService:
     return ScheduleService(session, repo, subject_repo, access, cache)
 
 
 def get_homework_service(
-    session: SessionDep, repo: HomeworkRepoDep, subject_repo: SubjectRepoDep,
-    access: AccessDep, cache: JsonCacheDep,
+    session: SessionDep,
+    repo: HomeworkRepoDep,
+    subject_repo: SubjectRepoDep,
+    access: AccessDep,
+    cache: JsonCacheDep,
 ) -> HomeworkService:
     return HomeworkService(session, repo, subject_repo, access, cache)
 
 
-def get_event_service(session: SessionDep, repo: EventRepoDep, access: AccessDep) -> SchoolEventService:
+def get_event_service(
+    session: SessionDep, repo: EventRepoDep, access: AccessDep
+) -> SchoolEventService:
     return SchoolEventService(session, repo, access)
 
 
@@ -144,8 +157,10 @@ EventServiceDep = Annotated[SchoolEventService, Depends(get_event_service)]
 
 
 def get_day_service(
-    schedule: ScheduleServiceDep, homework_repo: HomeworkRepoDep,
-    event_repo: EventRepoDep, access: AccessDep,
+    schedule: ScheduleServiceDep,
+    homework_repo: HomeworkRepoDep,
+    event_repo: EventRepoDep,
+    access: AccessDep,
 ) -> ClassDayService:
     return ClassDayService(schedule, homework_repo, event_repo, access)
 

@@ -30,7 +30,10 @@ async def test_admin_can_create_class(transaction_session, admin):
     entity = SchoolClassORM(id=uuid4(), name="10A", academic_year="2026/2027")
     repository.create.return_value = entity
     service = SchoolClassService(transaction_session, repository, access)
-    assert await service.create(SchoolClassCreate(name="10A", academic_year="2026/2027"), admin) is entity
+    assert (
+        await service.create(SchoolClassCreate(name="10A", academic_year="2026/2027"), admin)
+        is entity
+    )
     access.require_admin.assert_called_once_with(admin)
     assert service.pending_events[0].event_type == "class.created"
 
@@ -40,7 +43,9 @@ async def test_user_cannot_create_class(transaction_session, user):
     repository, access = AsyncMock(), MagicMock()
     access.require_admin.side_effect = ClassAccessDeniedError()
     with pytest.raises(ClassAccessDeniedError):
-        await SchoolClassService(transaction_session, repository, access).create(SchoolClassCreate(name="10A", academic_year="2026/2027"), user)
+        await SchoolClassService(transaction_session, repository, access).create(
+            SchoolClassCreate(name="10A", academic_year="2026/2027"), user
+        )
     repository.create.assert_not_awaited()
 
 
@@ -48,12 +53,21 @@ async def test_user_cannot_create_class(transaction_session, user):
 async def test_admin_can_add_member(transaction_session, admin):
     class_id = uuid4()
     repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
-    classes.get_by_id.return_value = SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")
+    classes.get_by_id.return_value = SchoolClassORM(
+        id=class_id, name="10A", academic_year="2026/2027"
+    )
     repository.get.return_value = None
-    entity = ClassMemberORM(id=uuid4(), class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT)
+    entity = ClassMemberORM(
+        id=uuid4(), class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT
+    )
     repository.create.return_value = entity
     service = ClassMemberService(transaction_session, repository, classes, access)
-    assert await service.add(class_id, ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT), admin) is entity
+    assert (
+        await service.add(
+            class_id, ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT), admin
+        )
+        is entity
+    )
     assert service.pending_events[0].event_type == "class.member_added"
 
 
@@ -61,8 +75,12 @@ async def test_admin_can_add_member(transaction_session, admin):
 async def test_duplicate_member_is_rejected(transaction_session, admin):
     class_id = uuid4()
     repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
-    classes.get_by_id.return_value = SchoolClassORM(id=class_id, name="10A", academic_year="2026/2027")
-    repository.get.return_value = ClassMemberORM(class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT)
+    classes.get_by_id.return_value = SchoolClassORM(
+        id=class_id, name="10A", academic_year="2026/2027"
+    )
+    repository.get.return_value = ClassMemberORM(
+        class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT
+    )
     with pytest.raises(ClassMemberAlreadyExistsError):
         await ClassMemberService(transaction_session, repository, classes, access).add(
             class_id, ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT), admin
@@ -94,10 +112,16 @@ async def test_admin_can_promote_student_to_editor(transaction_session, admin):
     class_id = uuid4()
     repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
     member = ClassMemberORM(
-        id=uuid4(), class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT,
+        id=uuid4(),
+        class_id=class_id,
+        telegram_id=20,
+        role=ClassMemberRole.STUDENT,
     )
     updated_member = ClassMemberORM(
-        id=member.id, class_id=class_id, telegram_id=20, role=ClassMemberRole.EDITOR,
+        id=member.id,
+        class_id=class_id,
+        telegram_id=20,
+        role=ClassMemberRole.EDITOR,
     )
     repository.get.return_value = member
     repository.update.return_value = updated_member

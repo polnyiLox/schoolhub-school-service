@@ -3,17 +3,16 @@ from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
-    async_sessionmaker,
     create_async_engine,
 )
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
+from alembic import command
 
 os.environ.setdefault("APP_CONFIG__DB__USER", "postgres")
 os.environ.setdefault("APP_CONFIG__DB__PASSWORD", "postgres")
@@ -34,8 +33,9 @@ os.environ.setdefault("APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS", "false")
 # PostgreSQL
 # ============================================================
 
+
 @pytest.fixture(scope="session")
-def postgres_container() -> Generator[PostgresContainer, None, None]:
+def postgres_container() -> Generator[PostgresContainer]:
     """
     Один PostgreSQL container на весь test session.
     """
@@ -70,6 +70,7 @@ def database_url(
 # Database migrations
 # ============================================================
 
+
 @pytest.fixture(scope="session")
 def apply_migrations(database_url: str) -> None:
     """
@@ -91,6 +92,7 @@ def apply_migrations(database_url: str) -> None:
 # SQLAlchemy Engine
 # ============================================================
 
+
 @pytest_asyncio.fixture(
     scope="session",
     loop_scope="session",
@@ -98,7 +100,7 @@ def apply_migrations(database_url: str) -> None:
 async def engine(
     database_url: str,
     apply_migrations: None,
-) -> AsyncGenerator[AsyncEngine, None]:
+) -> AsyncGenerator[AsyncEngine]:
     """
     Один AsyncEngine на весь test session.
     """
@@ -117,10 +119,11 @@ async def engine(
 # Database session
 # ============================================================
 
+
 @pytest_asyncio.fixture
 async def session(
     engine: AsyncEngine,
-) -> AsyncGenerator[AsyncSession, None]:
+) -> AsyncGenerator[AsyncSession]:
     """
     Каждый тест получает собственную транзакцию.
 
@@ -129,7 +132,6 @@ async def session(
     """
 
     async with engine.connect() as connection:
-
         transaction = await connection.begin()
 
         session = AsyncSession(

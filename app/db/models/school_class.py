@@ -37,9 +37,7 @@ class ClassMemberORM(TimestampMixin, Base):
         Index("ix_class_members_class_telegram", "class_id", "telegram_id"),
     )
 
-    class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("school_classes.id", ondelete="CASCADE")
-    )
+    class_id: Mapped[UUID] = mapped_column(ForeignKey("school_classes.id", ondelete="CASCADE"))
     telegram_id: Mapped[int] = mapped_column(BigInteger)
     role: Mapped[ClassMemberRole] = mapped_column(
         Enum(

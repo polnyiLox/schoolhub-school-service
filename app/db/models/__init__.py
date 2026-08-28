@@ -5,8 +5,6 @@ from .school_class import ClassMemberORM, SchoolClassORM
 from .school_event import SchoolEventORM
 from .subject import SubjectORM
 
-
-
 __all__ = [
     "Base",
     "ClassMemberORM",

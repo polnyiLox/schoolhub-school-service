@@ -5,10 +5,7 @@ from .json import JsonCache
 from .keys import CacheKeyBuilder, CacheNamespace
 from .redis import RedisCache
 
-
-redis_cache = RedisCache(
-    settings=settings.redis
-)
+redis_cache = RedisCache(settings=settings.redis)
 cache_key_builder = CacheKeyBuilder(settings.redis.key_prefix)
 json_cache = JsonCache(redis_cache, cache_key_builder)
 

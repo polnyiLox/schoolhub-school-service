@@ -5,7 +5,12 @@ import pytest
 
 from app.enums import ClassMemberRole, GlobalRole
 from app.exceptions import ClassAccessDeniedError, SubjectDoesNotBelongToClassError
-from app.repositories import ClassMemberRepository, HomeworkRepository, SchoolClassRepository, SubjectRepository
+from app.repositories import (
+    ClassMemberRepository,
+    HomeworkRepository,
+    SchoolClassRepository,
+    SubjectRepository,
+)
 from app.schemas import CurrentUser, HomeworkCreate, HomeworkUpdate
 from app.services import ClassAccessService, HomeworkService
 from tests.integration.helpers import create_class, create_member, create_subject
@@ -19,7 +24,9 @@ def homework_service(session):
     classes = SchoolClassRepository(session)
     members = ClassMemberRepository(session)
     subjects = SubjectRepository(session)
-    return HomeworkService(session, HomeworkRepository(session), subjects, ClassAccessService(classes, members))
+    return HomeworkService(
+        session, HomeworkRepository(session), subjects, ClassAccessService(classes, members)
+    )
 
 
 @pytest.mark.asyncio
@@ -30,7 +37,12 @@ async def test_editor_creates_homework_with_real_repositories(session):
         await create_member(session, school_class.id, 20, ClassMemberRole.EDITOR)
     entity = await homework_service(session).create(
         school_class.id,
-        HomeworkCreate(subject_id=subject.id, assigned_date=date(2026, 9, 14), due_date=date(2026, 9, 15), text="Task"),
+        HomeworkCreate(
+            subject_id=subject.id,
+            assigned_date=date(2026, 9, 14),
+            due_date=date(2026, 9, 15),
+            text="Task",
+        ),
         actor(20),
     )
     assert entity.id is not None
@@ -46,7 +58,12 @@ async def test_student_cannot_create_homework_with_real_membership(session):
     with pytest.raises(ClassAccessDeniedError):
         await homework_service(session).create(
             school_class.id,
-            HomeworkCreate(subject_id=subject.id, assigned_date=date(2026, 9, 14), due_date=date(2026, 9, 15), text="Task"),
+            HomeworkCreate(
+                subject_id=subject.id,
+                assigned_date=date(2026, 9, 14),
+                due_date=date(2026, 9, 15),
+                text="Task",
+            ),
             actor(30),
         )
 
@@ -60,7 +77,12 @@ async def test_homework_update_and_revision_are_atomic(session):
     service = homework_service(session)
     entity = await service.create(
         school_class.id,
-        HomeworkCreate(subject_id=subject.id, assigned_date=date(2026, 9, 14), due_date=date(2026, 9, 15), text="Old"),
+        HomeworkCreate(
+            subject_id=subject.id,
+            assigned_date=date(2026, 9, 14),
+            due_date=date(2026, 9, 15),
+            text="Old",
+        ),
         actor(20),
     )
     await service.update(school_class.id, entity.id, HomeworkUpdate(text="New"), actor(20))
@@ -78,6 +100,11 @@ async def test_other_class_subject_is_rejected_with_real_db(session):
     with pytest.raises(SubjectDoesNotBelongToClassError):
         await homework_service(session).create(
             first.id,
-            HomeworkCreate(subject_id=foreign_subject.id, assigned_date=date(2026, 9, 14), due_date=date(2026, 9, 15), text="Task"),
+            HomeworkCreate(
+                subject_id=foreign_subject.id,
+                assigned_date=date(2026, 9, 14),
+                due_date=date(2026, 9, 15),
+                text="Task",
+            ),
             actor(20),
         )

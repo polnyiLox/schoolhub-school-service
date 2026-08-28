@@ -86,7 +86,7 @@ class Settings(BaseSettings):
         env_prefix="APP_CONFIG__",
         env_nested_delimiter="__",
         extra="ignore",
-        case_sensitive=False
+        case_sensitive=False,
     )
 
 

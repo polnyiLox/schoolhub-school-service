@@ -1,6 +1,5 @@
-from uuid import UUID
-
 from typing import ClassVar, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
 

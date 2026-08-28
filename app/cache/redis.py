@@ -7,7 +7,6 @@ from app.core.config import RedisSettings
 
 from .base import Cache
 
-
 logger = logging.getLogger(__name__)
 
 

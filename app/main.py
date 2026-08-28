@@ -13,7 +13,6 @@ from app.core.health import router as health_router
 from app.core.logging import configure_logging
 from app.db.session import engine_dispose
 
-
 configure_logging(settings.logging.level)
 logger = logging.getLogger(__name__)
 
@@ -56,5 +55,5 @@ app.add_middleware(
     allow_origins=settings.middleware.allow_origins,
     allow_methods=settings.middleware.allow_methods,
     allow_headers=settings.middleware.allow_headers,
-    allow_credentials=settings.middleware.allow_credentials
+    allow_credentials=settings.middleware.allow_credentials,
 )

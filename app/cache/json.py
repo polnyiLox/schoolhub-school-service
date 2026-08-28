@@ -6,7 +6,6 @@ from pydantic import TypeAdapter, ValidationError
 from .base import Cache
 from .keys import CacheKeyBuilder, CacheNamespace
 
-
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 

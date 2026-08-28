@@ -2,7 +2,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from app.api.dependencies import CorrelationIdDep, CurrentUserDep, KafkaProducerDep, SubjectServiceDep
+from app.api.dependencies import (
+    CorrelationIdDep,
+    CurrentUserDep,
+    KafkaProducerDep,
+    SubjectServiceDep,
+)
 from app.api.event_publishing import execute_and_publish
 from app.schemas import SubjectCreate, SubjectRead, SubjectUpdate
 

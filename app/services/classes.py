@@ -39,6 +39,7 @@ class SchoolClassService(EventCollectingService):
         self.access = access
 
     async def create(self, data: SchoolClassCreate, actor: CurrentUser, correlation_id: str | None = None) -> SchoolClassORM:
+        logger.info("Creating class: academic_year=%s", data.academic_year)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self.repository.create(
@@ -54,22 +55,31 @@ class SchoolClassService(EventCollectingService):
         return entity
 
     async def list(self, actor: CurrentUser) -> list[SchoolClassORM]:
+        logger.info("Listing classes: telegram_id=%s", actor.telegram_id)
         if actor.global_role == GlobalRole.ADMIN:
-            return await self.repository.list()
-        return await self.repository.list_for_telegram_id(actor.telegram_id)
+            entities = await self.repository.list()
+        else:
+            entities = await self.repository.list_for_telegram_id(actor.telegram_id)
+        logger.info("Classes listed: telegram_id=%s, count=%d", actor.telegram_id, len(entities))
+        return entities
 
     async def get(self, class_id: UUID, actor: CurrentUser) -> SchoolClassORM:
+        logger.info("Getting class: class_id=%s", class_id)
         await self.access.require_member(class_id, actor)
         entity = await self.repository.get_by_id(class_id)
         if entity is None:
+            logger.warning("Class not found after access check: class_id=%s", class_id)
             raise ClassNotFoundError()
+        logger.info("Class retrieved: class_id=%s", class_id)
         return entity
 
     async def update(self, class_id: UUID, data: SchoolClassUpdate, actor: CurrentUser) -> SchoolClassORM:
+        logger.info("Updating class: class_id=%s", class_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self.repository.get_by_id(class_id)
             if entity is None:
+                logger.warning("Class update target not found: class_id=%s", class_id)
                 raise ClassNotFoundError()
             entity = await self.repository.update(
                 entity,
@@ -91,15 +101,21 @@ class ClassMemberService(EventCollectingService):
         self.access = access
 
     async def list(self, class_id: UUID, actor: CurrentUser) -> list[ClassMemberORM]:
+        logger.info("Listing class members: class_id=%s", class_id)
         await self.access.require_member(class_id, actor)
-        return await self.repository.list(class_id)
+        entities = await self.repository.list(class_id)
+        logger.info("Class members listed: class_id=%s, count=%d", class_id, len(entities))
+        return entities
 
     async def add(self, class_id: UUID, data: ClassMemberCreate, actor: CurrentUser, correlation_id: str | None = None) -> ClassMemberORM:
+        logger.info("Adding class member: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             if await self.class_repository.get_by_id(class_id) is None:
+                logger.warning("Cannot add member because class was not found: class_id=%s", class_id)
                 raise ClassNotFoundError()
             if await self.repository.get(class_id, data.telegram_id) is not None:
+                logger.warning("Class member already exists: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
                 raise ClassMemberAlreadyExistsError()
             entity = await self.repository.create(
                 class_id=class_id,
@@ -115,10 +131,12 @@ class ClassMemberService(EventCollectingService):
         return entity
 
     async def update(self, class_id: UUID, telegram_id: int, data: ClassMemberUpdate, actor: CurrentUser) -> ClassMemberORM:
+        logger.info("Updating class member: class_id=%s, telegram_id=%s", class_id, telegram_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self.repository.get(class_id, telegram_id)
             if entity is None:
+                logger.warning("Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id)
                 raise ClassMemberNotFoundError()
             entity = await self.repository.update(entity, data.model_dump())
         self.pending_events.append(build_domain_event(
@@ -130,10 +148,12 @@ class ClassMemberService(EventCollectingService):
         return entity
 
     async def delete(self, class_id: UUID, telegram_id: int, actor: CurrentUser) -> None:
+        logger.info("Deleting class member: class_id=%s, telegram_id=%s", class_id, telegram_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self.repository.get(class_id, telegram_id)
             if entity is None:
+                logger.warning("Class member not found: class_id=%s, telegram_id=%s", class_id, telegram_id)
                 raise ClassMemberNotFoundError()
             entity_id = entity.id
             await self.repository.delete(entity)
@@ -152,13 +172,18 @@ class SubjectService(EventCollectingService):
         self.access = access
 
     async def list(self, class_id: UUID, actor: CurrentUser) -> list[SubjectORM]:
+        logger.info("Listing subjects: class_id=%s", class_id)
         await self.access.require_member(class_id, actor)
-        return await self.repository.list(class_id)
+        entities = await self.repository.list(class_id)
+        logger.info("Subjects listed: class_id=%s, count=%d", class_id, len(entities))
+        return entities
 
     async def create(self, class_id: UUID, data: SubjectCreate, actor: CurrentUser) -> SubjectORM:
+        logger.info("Creating subject: class_id=%s", class_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             if await self.access.class_repository.get_by_id(class_id) is None:
+                logger.warning("Cannot create subject because class was not found: class_id=%s", class_id)
                 raise ClassNotFoundError()
             entity = await self.repository.create(
                 class_id=class_id,
@@ -170,6 +195,7 @@ class SubjectService(EventCollectingService):
         return entity
 
     async def update(self, class_id: UUID, subject_id: UUID, data: SubjectUpdate, actor: CurrentUser) -> SubjectORM:
+        logger.info("Updating subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, subject_id)
@@ -182,6 +208,7 @@ class SubjectService(EventCollectingService):
         return entity
 
     async def delete(self, class_id: UUID, subject_id: UUID, actor: CurrentUser) -> None:
+        logger.info("Deleting subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, subject_id)
@@ -192,8 +219,10 @@ class SubjectService(EventCollectingService):
     async def _get_for_class(self, class_id: UUID, subject_id: UUID) -> SubjectORM:
         entity = await self.repository.get_by_id(subject_id)
         if entity is None:
+            logger.warning("Subject not found: class_id=%s, subject_id=%s", class_id, subject_id)
             raise SubjectNotFoundError()
         if entity.class_id != class_id:
+            logger.warning("Subject belongs to another class: class_id=%s, subject_id=%s", class_id, subject_id)
             raise SubjectDoesNotBelongToClassError()
         return entity
 

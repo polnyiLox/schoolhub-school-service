@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ClassMemberORM, SchoolClassORM
 from app.enums import ClassMemberRole
@@ -12,6 +13,15 @@ from app.exceptions import (
 )
 from app.schemas import ClassMemberCreate, ClassMemberUpdate, SchoolClassCreate
 from app.services import ClassMemberService, SchoolClassService
+
+
+class ConstraintViolation(Exception):
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+def integrity_error(constraint_name: str) -> IntegrityError:
+    return IntegrityError(None, None, ConstraintViolation(constraint_name))
 
 
 @pytest.mark.asyncio
@@ -56,6 +66,26 @@ async def test_duplicate_member_is_rejected(transaction_session, admin):
     with pytest.raises(ClassMemberAlreadyExistsError):
         await ClassMemberService(transaction_session, repository, classes, access).add(
             class_id, ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT), admin
+        )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_member_is_rejected(transaction_session, admin):
+    class_id = uuid4()
+    repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
+    classes.get_by_id.return_value = SchoolClassORM(
+        id=class_id,
+        name="10A",
+        academic_year="2026/2027",
+    )
+    repository.get.return_value = None
+    repository.create.side_effect = integrity_error("uq_class_member_telegram")
+
+    with pytest.raises(ClassMemberAlreadyExistsError):
+        await ClassMemberService(transaction_session, repository, classes, access).add(
+            class_id,
+            ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT),
+            admin,
         )
 
 

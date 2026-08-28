@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
 from app.enums import ScheduleOverrideType
@@ -15,6 +16,15 @@ from app.exceptions import (
 )
 from app.schemas import ScheduleDayRead, ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleOverrideCreate
 from app.services import ScheduleService
+
+
+class ConstraintViolation(Exception):
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+def integrity_error(constraint_name: str) -> IntegrityError:
+    return IntegrityError(None, None, ConstraintViolation(constraint_name))
 
 
 def dependencies(transaction_session, class_id, subject_id, cache=None):
@@ -68,6 +78,51 @@ async def test_duplicate_schedule_slot_is_rejected(transaction_session, admin):
     repository.get_slot.return_value = ScheduleEntryORM(class_id=class_id, subject_id=subject_id, weekday=0, lesson_number=1, start_time=time(8), end_time=time(9))
     with pytest.raises(ScheduleConflictError):
         await service.create_entry(class_id, ScheduleEntryCreate(subject_id=subject_id, weekday=0, lesson_number=1, start_time=time(8), end_time=time(9)), admin)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_duplicate_schedule_slot_is_rejected(transaction_session, admin):
+    class_id, subject_id = uuid4(), uuid4()
+    service, repository = dependencies(transaction_session, class_id, subject_id)
+    repository.get_slot.return_value = None
+    repository.create_entry.side_effect = integrity_error("uq_schedule_class_slot")
+
+    with pytest.raises(ScheduleConflictError):
+        await service.create_entry(
+            class_id,
+            ScheduleEntryCreate(
+                subject_id=subject_id,
+                weekday=0,
+                lesson_number=1,
+                start_time=time(8),
+                end_time=time(9),
+            ),
+            admin,
+        )
+
+
+@pytest.mark.asyncio
+async def test_unknown_schedule_integrity_error_is_not_masked(transaction_session, admin):
+    class_id, subject_id = uuid4(), uuid4()
+    service, repository = dependencies(transaction_session, class_id, subject_id)
+    repository.get_slot.return_value = None
+    error = integrity_error("some_other_constraint")
+    repository.create_entry.side_effect = error
+
+    with pytest.raises(IntegrityError) as raised:
+        await service.create_entry(
+            class_id,
+            ScheduleEntryCreate(
+                subject_id=subject_id,
+                weekday=0,
+                lesson_number=1,
+                start_time=time(8),
+                end_time=time(9),
+            ),
+            admin,
+        )
+
+    assert raised.value is error
 
 
 @pytest.mark.asyncio

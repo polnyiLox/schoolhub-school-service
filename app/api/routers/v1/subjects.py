@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from app.api.dependencies import CurrentUserDep, KafkaProducerDep, SubjectServiceDep
+from app.api.dependencies import CorrelationIdDep, CurrentUserDep, KafkaProducerDep, SubjectServiceDep
 from app.api.event_publishing import execute_and_publish
 from app.schemas import SubjectCreate, SubjectRead, SubjectUpdate
 
@@ -25,11 +25,13 @@ async def create_subject(
     actor: CurrentUserDep,
     service: SubjectServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ):
     return await execute_and_publish(
         service.create(class_id, payload, actor),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -41,11 +43,13 @@ async def update_subject(
     actor: CurrentUserDep,
     service: SubjectServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ):
     return await execute_and_publish(
         service.update(class_id, subject_id, payload, actor),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -56,10 +60,12 @@ async def delete_subject(
     actor: CurrentUserDep,
     service: SubjectServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ) -> Response:
     await execute_and_publish(
         service.delete(class_id, subject_id, actor),
         service,
         producer,
+        correlation_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

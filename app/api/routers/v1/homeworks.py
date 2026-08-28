@@ -46,6 +46,7 @@ async def create_homework(
         service.create(class_id, payload, actor, correlation_id),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -57,11 +58,13 @@ async def update_homework(
     actor: CurrentUserDep,
     service: HomeworkServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ):
     return await execute_and_publish(
         service.update(class_id, homework_id, payload, actor),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -72,11 +75,13 @@ async def delete_homework(
     actor: CurrentUserDep,
     service: HomeworkServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ) -> Response:
     await execute_and_publish(
         service.delete(class_id, homework_id, actor),
         service,
         producer,
+        correlation_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

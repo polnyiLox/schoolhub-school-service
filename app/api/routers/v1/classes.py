@@ -33,6 +33,7 @@ async def create_class(
         service.create(payload, actor, correlation_id),
         service,
         producer,
+        correlation_id,
     )
 
 

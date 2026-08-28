@@ -11,11 +11,14 @@ async def execute_and_publish(
     operation: Awaitable[ResultT],
     service: EventCollectingService,
     producer: KafkaProducer,
+    correlation_id: str | None = None,
 ) -> ResultT:
     """Execute a service operation and publish events created by that operation."""
     result = await operation
 
     for event in service.get_pending_events():
+        if event.correlation_id is None:
+            event.correlation_id = correlation_id
         await producer.publish(event)
 
     service.drain_events()

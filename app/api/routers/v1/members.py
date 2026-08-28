@@ -36,6 +36,7 @@ async def add_member(
         service.add(class_id, payload, actor, correlation_id),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -47,11 +48,13 @@ async def update_member(
     actor: CurrentUserDep,
     service: MemberServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ):
     return await execute_and_publish(
         service.update(class_id, telegram_id, payload, actor),
         service,
         producer,
+        correlation_id,
     )
 
 
@@ -62,10 +65,12 @@ async def delete_member(
     actor: CurrentUserDep,
     service: MemberServiceDep,
     producer: KafkaProducerDep,
+    correlation_id: CorrelationIdDep = None,
 ) -> Response:
     await execute_and_publish(
         service.delete(class_id, telegram_id, actor),
         service,
         producer,
+        correlation_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import ClassVar
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from app.enums import SchoolEventType
 from app.schemas.common import NonEmptyUpdateModel, ORMReadModel
@@ -12,8 +12,8 @@ class SchoolEventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     event_type: SchoolEventType
-    starts_at: datetime
-    ends_at: datetime | None = None
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime | None = None
 
 
 class SchoolEventUpdate(NonEmptyUpdateModel):
@@ -23,8 +23,8 @@ class SchoolEventUpdate(NonEmptyUpdateModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     event_type: SchoolEventType | None = None
-    starts_at: datetime | None = None
-    ends_at: datetime | None = None
+    starts_at: AwareDatetime | None = None
+    ends_at: AwareDatetime | None = None
 
 
 class SchoolEventRead(ORMReadModel):

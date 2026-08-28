@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
 
@@ -104,7 +105,7 @@ async def engine(
 
     engine = create_async_engine(
         database_url,
-        pool_pre_ping=True,
+        poolclass=NullPool,
     )
 
     yield engine

@@ -122,3 +122,20 @@ async def test_domain_validation_error_maps_to_422(client):
         json={"title": "Exam", "event_type": "exam", "starts_at": now.isoformat()},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_unexpected_error_maps_to_safe_500_response(client):
+    service = service_mock()
+    service.create.side_effect = RuntimeError("database credentials must not leak")
+    app.dependency_overrides[get_class_service] = lambda: service
+
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as safe_client:
+        response = await safe_client.post(
+            "/v1/classes",
+            json={"name": "10A", "academic_year": "2026/2027"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}

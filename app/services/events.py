@@ -22,14 +22,22 @@ class SchoolEventService(EventCollectingService):
         self.access = access
 
     async def list(self, class_id: UUID, actor: CurrentUser) -> list[SchoolEventORM]:
+        logger.info("Listing school events: class_id=%s", class_id)
         await self.access.require_member(class_id, actor)
-        return await self.repository.list(class_id)
+        logger.debug("Loading school events from database: class_id=%s", class_id)
+        entities = await self.repository.list(class_id)
+        logger.info("School events listed: class_id=%s, count=%d", class_id, len(entities))
+        return entities
 
     async def get(self, class_id: UUID, event_id: UUID, actor: CurrentUser) -> SchoolEventORM:
+        logger.info("Getting school event: class_id=%s, event_id=%s", class_id, event_id)
         await self.access.require_member(class_id, actor)
-        return await self._get_for_class(class_id, event_id)
+        entity = await self._get_for_class(class_id, event_id)
+        logger.info("School event retrieved: class_id=%s, event_id=%s", class_id, event_id)
+        return entity
 
     async def create(self, class_id: UUID, data: SchoolEventCreate, actor: CurrentUser) -> SchoolEventORM:
+        logger.info("Creating school event: class_id=%s, type=%s", class_id, data.event_type)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
             self._validate_dates(data.starts_at, data.ends_at)
@@ -47,6 +55,7 @@ class SchoolEventService(EventCollectingService):
         return entity
 
     async def update(self, class_id: UUID, event_id: UUID, data: SchoolEventUpdate, actor: CurrentUser) -> SchoolEventORM:
+        logger.info("Updating school event: class_id=%s, event_id=%s", class_id, event_id)
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
             entity = await self._get_for_class(class_id, event_id)
@@ -60,6 +69,7 @@ class SchoolEventService(EventCollectingService):
         return entity
 
     async def delete(self, class_id: UUID, event_id: UUID, actor: CurrentUser) -> None:
+        logger.info("Deleting school event: class_id=%s, event_id=%s", class_id, event_id)
         self.access.require_admin(actor)
         async with self.session.begin():
             entity = await self._get_for_class(class_id, event_id)
@@ -70,12 +80,14 @@ class SchoolEventService(EventCollectingService):
     async def _get_for_class(self, class_id: UUID, event_id: UUID) -> SchoolEventORM:
         entity = await self.repository.get_by_id(event_id)
         if entity is None or entity.class_id != class_id:
+            logger.warning("School event not found: class_id=%s, event_id=%s", class_id, event_id)
             raise SchoolEventNotFoundError()
         return entity
 
     @staticmethod
     def _validate_dates(starts_at: datetime, ends_at: datetime | None) -> None:
         if ends_at is not None and ends_at < starts_at:
+            logger.warning("Invalid school event dates: starts_at=%s, ends_at=%s", starts_at, ends_at)
             raise InvalidSchoolEventDatesError()
 
     def _add_event(self, event_type: str, entity: SchoolEventORM, actor: CurrentUser) -> None:

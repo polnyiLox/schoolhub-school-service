@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -105,3 +106,20 @@ async def test_relay_start_and_stop_are_idempotent() -> None:
     await relay.stop()
     await relay.stop()
     assert relay.is_running is False
+
+
+@pytest.mark.asyncio
+async def test_relay_cleans_only_expired_published_events() -> None:
+    repository = MagicMock()
+    repository.delete_published_before = AsyncMock()
+    relay = OutboxRelay(
+        session_factory(),
+        AsyncMock(spec=KafkaProducer),
+        OutboxSettings(published_retention_hours=24),
+    )
+
+    with patch("app.broker.outbox_relay.OutboxRepository", return_value=repository):
+        await relay.cleanup_published()
+
+    cutoff = repository.delete_published_before.await_args.args[0]
+    assert 23.9 < (datetime.now(UTC) - cutoff).total_seconds() / 3_600 < 24.1

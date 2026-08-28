@@ -98,6 +98,27 @@ async def test_execute_and_publish_returns_operation_result():
 
 
 @pytest.mark.asyncio
+async def test_execute_and_publish_adds_request_correlation_id():
+    service = EventCollectingService()
+    domain_event = event()
+    service.pending_events.append(domain_event)
+    producer = AsyncMock(spec=KafkaProducer)
+
+    async def operation() -> None:
+        return None
+
+    await execute_and_publish(
+        operation(),
+        service,
+        producer,
+        correlation_id="request-42",
+    )
+
+    published_event = producer.publish.await_args.args[0]
+    assert published_event.correlation_id == "request-42"
+
+
+@pytest.mark.asyncio
 async def test_failed_service_operation_does_not_publish():
     service = EventCollectingService()
     producer = AsyncMock(spec=KafkaProducer)

@@ -87,9 +87,9 @@ uv run pytest tests/e2e -q
 Unit-тесты используют mock session/repositories/services. Integration и E2E запускают
 настоящий PostgreSQL через Testcontainers, поэтому им нужен работающий Docker daemon.
 
-Текущий набор содержит 142 теста:
+Текущий набор содержит 143 теста:
 
-- 125 unit: repository, services, API, cache, Kafka, outbox relay и readiness;
+- 126 unit: repository, services, API, cache, Kafka, outbox relay и readiness;
 - 14 integration: repository, service, transactional outbox и API с PostgreSQL;
 - 3 E2E flow: class-to-day, замена урока и история домашнего задания.
 

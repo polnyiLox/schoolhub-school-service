@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -5,7 +6,13 @@ import pytest
 
 from app.db.models import ClassMemberORM, HomeworkORM, SchoolClassORM, SubjectORM
 from app.enums import ClassMemberRole
-from app.repositories import ClassMemberRepository, HomeworkRepository, SchoolClassRepository, SubjectRepository
+from app.repositories import (
+    ClassMemberRepository,
+    HomeworkRepository,
+    SchoolClassRepository,
+    SchoolEventRepository,
+    SubjectRepository,
+)
 
 
 def mock_session() -> MagicMock:
@@ -99,3 +106,22 @@ async def test_revision_repository_adds_revision_to_same_session():
     assert revision.old_text == "old"
     session.add.assert_called_once_with(revision)
     session.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_event_day_query_includes_events_overlapping_day():
+    session = mock_session()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute.return_value = result
+    day_start = datetime(2026, 9, 14, tzinfo=UTC)
+    day_end = day_start + timedelta(days=1)
+
+    await SchoolEventRepository(session).list_for_day(uuid4(), day_start, day_end)
+
+    query = session.execute.await_args.args[0]
+    sql = str(query.compile())
+    assert "school_events.ends_at IS NULL" in sql
+    assert "school_events.ends_at >" in sql
+    assert day_start in query.compile().params.values()
+    assert day_end in query.compile().params.values()

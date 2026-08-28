@@ -34,7 +34,24 @@ async def test_kafka_client_connects_only_once():
         await client.connect_producer()
 
     producer_class.assert_called_once()
+    assert producer_class.call_args.kwargs["acks"] == "all"
+    assert producer_class.call_args.kwargs["enable_idempotence"] is True
+    assert producer_class.call_args.kwargs["compression_type"] == "gzip"
     raw_producer.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_kafka_client_cleans_up_after_connection_failure():
+    raw_producer = MagicMock()
+    raw_producer.start = AsyncMock(side_effect=ConnectionError("Kafka unavailable"))
+    raw_producer.stop = AsyncMock()
+
+    with patch("app.broker.kafka_client.AIOKafkaProducer", return_value=raw_producer):
+        client = KafkaClient(KafkaSettings())
+        with pytest.raises(ConnectionError, match="Kafka unavailable"):
+            await client.connect_producer()
+
+    raw_producer.stop.assert_awaited_once()
 
 
 @pytest.mark.asyncio

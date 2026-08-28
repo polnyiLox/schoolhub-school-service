@@ -1,13 +1,16 @@
 from datetime import date
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
+from app.db.models import OutboxEventORM
 from app.enums import ClassMemberRole, GlobalRole
 from app.exceptions import ClassAccessDeniedError, SubjectDoesNotBelongToClassError
 from app.repositories import (
     ClassMemberRepository,
     HomeworkRepository,
+    OutboxRepository,
     SchoolClassRepository,
     SubjectRepository,
 )
@@ -20,12 +23,16 @@ def actor(telegram_id: int, role=GlobalRole.USER):
     return CurrentUser(user_id=uuid4(), telegram_id=telegram_id, global_role=role)
 
 
-def homework_service(session):
+def homework_service(session, outbox=None):
     classes = SchoolClassRepository(session)
     members = ClassMemberRepository(session)
     subjects = SubjectRepository(session)
     return HomeworkService(
-        session, HomeworkRepository(session), subjects, ClassAccessService(classes, members)
+        session,
+        HomeworkRepository(session),
+        subjects,
+        ClassAccessService(classes, members),
+        outbox_repository=outbox,
     )
 
 
@@ -108,3 +115,54 @@ async def test_other_class_subject_is_rejected_with_real_db(session):
             ),
             actor(20),
         )
+
+
+@pytest.mark.asyncio
+async def test_homework_and_outbox_event_commit_atomically(session):
+    async with session.begin():
+        school_class = await create_class(session)
+        subject = await create_subject(session, school_class.id)
+        await create_member(session, school_class.id, 20, ClassMemberRole.EDITOR)
+    service = homework_service(session, OutboxRepository(session))
+
+    entity = await service.create(
+        school_class.id,
+        HomeworkCreate(
+            subject_id=subject.id,
+            assigned_date=date(2026, 9, 14),
+            due_date=date(2026, 9, 15),
+            text="Task",
+        ),
+        actor(20),
+        correlation_id="request-42",
+    )
+
+    event = service.get_pending_events()[0]
+    outbox_event = await session.get(OutboxEventORM, event.event_id)
+    assert await HomeworkRepository(session).get_by_id(entity.id) is not None
+    assert outbox_event is not None
+    assert outbox_event.payload["correlation_id"] == "request-42"
+
+
+@pytest.mark.asyncio
+async def test_outbox_enqueue_failure_rolls_back_business_change(session):
+    async with session.begin():
+        school_class = await create_class(session)
+        subject = await create_subject(session, school_class.id)
+        await create_member(session, school_class.id, 20, ClassMemberRole.EDITOR)
+    outbox = MagicMock(spec=OutboxRepository)
+    outbox.enqueue.side_effect = RuntimeError("outbox write failed")
+
+    with pytest.raises(RuntimeError, match="outbox write failed"):
+        await homework_service(session, outbox).create(
+            school_class.id,
+            HomeworkCreate(
+                subject_id=subject.id,
+                assigned_date=date(2026, 9, 14),
+                due_date=date(2026, 9, 15),
+                text="Task",
+            ),
+            actor(20),
+        )
+
+    assert await HomeworkRepository(session).list(school_class.id) == []

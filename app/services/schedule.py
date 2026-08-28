@@ -3,10 +3,12 @@ from datetime import date, time, timedelta
 from uuid import UUID
 
 from pydantic import TypeAdapter
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import CacheNamespace, JsonCache
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
+from app.db.integrity import get_constraint_name
 from app.enums import ScheduleLessonStatus, ScheduleOverrideType
 from app.exceptions import (
     InvalidScheduleOverrideError,
@@ -158,20 +160,28 @@ class ScheduleService(EventCollectingService):
     async def create_entry(self, class_id: UUID, data: ScheduleEntryCreate, actor: CurrentUser) -> ScheduleEntryORM:
         logger.info("Creating schedule entry: class_id=%s, weekday=%d, lesson=%d", class_id, data.weekday, data.lesson_number)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            await self.access.require_member(class_id, actor)
-            await self._require_subject(class_id, data.subject_id)
-            if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
-                logger.warning("Schedule slot conflict: class_id=%s, weekday=%d, lesson=%d", class_id, data.weekday, data.lesson_number)
-                raise ScheduleConflictError()
-            entity = await self.repository.create_entry(
+        try:
+            async with self.session.begin():
+                await self.access.require_member(class_id, actor)
+                await self._require_subject(class_id, data.subject_id)
+                if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
+                    logger.warning("Schedule slot conflict: class_id=%s, weekday=%d, lesson=%d", class_id, data.weekday, data.lesson_number)
+                    raise ScheduleConflictError()
+                entity = await self.repository.create_entry(
+                    class_id=class_id,
+                    subject_id=data.subject_id,
+                    weekday=data.weekday,
+                    lesson_number=data.lesson_number,
+                    start_time=data.start_time,
+                    end_time=data.end_time,
+                    room=data.room,
+                )
+        except IntegrityError as error:
+            self._raise_slot_conflict(
+                error,
+                expected_constraint="uq_schedule_class_slot",
+                detail="The schedule slot is already occupied",
                 class_id=class_id,
-                subject_id=data.subject_id,
-                weekday=data.weekday,
-                lesson_number=data.lesson_number,
-                start_time=data.start_time,
-                end_time=data.end_time,
-                room=data.room,
             )
         self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
@@ -181,21 +191,29 @@ class ScheduleService(EventCollectingService):
     async def update_entry(self, class_id: UUID, entry_id: UUID, data: ScheduleEntryUpdate, actor: CurrentUser) -> ScheduleEntryORM:
         logger.info("Updating schedule entry: class_id=%s, entry_id=%s", class_id, entry_id)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            entity = await self._get_entry(class_id, entry_id)
-            changes = data.model_dump(exclude_unset=True)
-            subject_id = changes.get("subject_id", entity.subject_id)
-            await self._require_subject(class_id, subject_id)
-            start_time = changes.get("start_time", entity.start_time)
-            end_time = changes.get("end_time", entity.end_time)
-            self._validate_times(start_time, end_time)
-            weekday = changes.get("weekday", entity.weekday)
-            lesson_number = changes.get("lesson_number", entity.lesson_number)
-            conflict = await self.repository.get_slot(class_id, weekday, lesson_number)
-            if conflict is not None and conflict.id != entity.id:
-                logger.warning("Schedule slot conflict while updating: class_id=%s, entry_id=%s", class_id, entry_id)
-                raise ScheduleConflictError()
-            entity = await self.repository.update_entry(entity, changes)
+        try:
+            async with self.session.begin():
+                entity = await self._get_entry(class_id, entry_id)
+                changes = data.model_dump(exclude_unset=True)
+                subject_id = changes.get("subject_id", entity.subject_id)
+                await self._require_subject(class_id, subject_id)
+                start_time = changes.get("start_time", entity.start_time)
+                end_time = changes.get("end_time", entity.end_time)
+                self._validate_times(start_time, end_time)
+                weekday = changes.get("weekday", entity.weekday)
+                lesson_number = changes.get("lesson_number", entity.lesson_number)
+                conflict = await self.repository.get_slot(class_id, weekday, lesson_number)
+                if conflict is not None and conflict.id != entity.id:
+                    logger.warning("Schedule slot conflict while updating: class_id=%s, entry_id=%s", class_id, entry_id)
+                    raise ScheduleConflictError()
+                entity = await self.repository.update_entry(entity, changes)
+        except IntegrityError as error:
+            self._raise_slot_conflict(
+                error,
+                expected_constraint="uq_schedule_class_slot",
+                detail="The schedule slot is already occupied",
+                class_id=class_id,
+            )
         self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry updated: class_id=%s, entry_id=%s", class_id, entry_id)
@@ -214,23 +232,31 @@ class ScheduleService(EventCollectingService):
     async def create_override(self, class_id: UUID, data: ScheduleOverrideCreate, actor: CurrentUser) -> ScheduleOverrideORM:
         logger.info("Creating schedule override: class_id=%s, date=%s, lesson=%d", class_id, data.date, data.lesson_number)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            await self.access.require_member(class_id, actor)
-            await self._validate_override(class_id, data.override_type, data.subject_id, data.start_time, data.end_time)
-            if await self.repository.get_override_slot(class_id, data.date, data.lesson_number):
-                logger.warning("Schedule override conflict: class_id=%s, date=%s, lesson=%d", class_id, data.date, data.lesson_number)
-                raise ScheduleConflictError("An override already exists for this lesson")
-            entity = await self.repository.create_override(
+        try:
+            async with self.session.begin():
+                await self.access.require_member(class_id, actor)
+                await self._validate_override(class_id, data.override_type, data.subject_id, data.start_time, data.end_time)
+                if await self.repository.get_override_slot(class_id, data.date, data.lesson_number):
+                    logger.warning("Schedule override conflict: class_id=%s, date=%s, lesson=%d", class_id, data.date, data.lesson_number)
+                    raise ScheduleConflictError("An override already exists for this lesson")
+                entity = await self.repository.create_override(
+                    class_id=class_id,
+                    target_date=data.date,
+                    lesson_number=data.lesson_number,
+                    override_type=data.override_type,
+                    subject_id=data.subject_id,
+                    start_time=data.start_time,
+                    end_time=data.end_time,
+                    room=data.room,
+                    reason=data.reason,
+                    created_by_telegram_id=actor.telegram_id,
+                )
+        except IntegrityError as error:
+            self._raise_slot_conflict(
+                error,
+                expected_constraint="uq_override_class_slot",
+                detail="An override already exists for this lesson",
                 class_id=class_id,
-                target_date=data.date,
-                lesson_number=data.lesson_number,
-                override_type=data.override_type,
-                subject_id=data.subject_id,
-                start_time=data.start_time,
-                end_time=data.end_time,
-                room=data.room,
-                reason=data.reason,
-                created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("schedule.override_created", "schedule_override", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
@@ -240,21 +266,29 @@ class ScheduleService(EventCollectingService):
     async def update_override(self, class_id: UUID, override_id: UUID, data: ScheduleOverrideUpdate, actor: CurrentUser) -> ScheduleOverrideORM:
         logger.info("Updating schedule override: class_id=%s, override_id=%s", class_id, override_id)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            entity = await self._get_override(class_id, override_id)
-            changes = data.model_dump(exclude_unset=True)
-            effective_type = changes.get("override_type", entity.override_type)
-            subject_id = changes.get("subject_id", entity.subject_id)
-            start_time = changes.get("start_time", entity.start_time)
-            end_time = changes.get("end_time", entity.end_time)
-            await self._validate_override(class_id, effective_type, subject_id, start_time, end_time)
-            target_date = changes.get("date", entity.date)
-            lesson_number = changes.get("lesson_number", entity.lesson_number)
-            conflict = await self.repository.get_override_slot(class_id, target_date, lesson_number)
-            if conflict is not None and conflict.id != entity.id:
-                logger.warning("Schedule override conflict while updating: class_id=%s, override_id=%s", class_id, override_id)
-                raise ScheduleConflictError("An override already exists for this lesson")
-            entity = await self.repository.update_override(entity, changes)
+        try:
+            async with self.session.begin():
+                entity = await self._get_override(class_id, override_id)
+                changes = data.model_dump(exclude_unset=True)
+                effective_type = changes.get("override_type", entity.override_type)
+                subject_id = changes.get("subject_id", entity.subject_id)
+                start_time = changes.get("start_time", entity.start_time)
+                end_time = changes.get("end_time", entity.end_time)
+                await self._validate_override(class_id, effective_type, subject_id, start_time, end_time)
+                target_date = changes.get("date", entity.date)
+                lesson_number = changes.get("lesson_number", entity.lesson_number)
+                conflict = await self.repository.get_override_slot(class_id, target_date, lesson_number)
+                if conflict is not None and conflict.id != entity.id:
+                    logger.warning("Schedule override conflict while updating: class_id=%s, override_id=%s", class_id, override_id)
+                    raise ScheduleConflictError("An override already exists for this lesson")
+                entity = await self.repository.update_override(entity, changes)
+        except IntegrityError as error:
+            self._raise_slot_conflict(
+                error,
+                expected_constraint="uq_override_class_slot",
+                detail="An override already exists for this lesson",
+                class_id=class_id,
+            )
         self._add_event("schedule.override_updated", "schedule_override", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override updated: class_id=%s, override_id=%s", class_id, override_id)
@@ -321,6 +355,24 @@ class ScheduleService(EventCollectingService):
             actor_telegram_id=actor.telegram_id, class_id=class_id,
             payload={"entity_id": str(aggregate_id)},
         ))
+
+    @staticmethod
+    def _raise_slot_conflict(
+        error: IntegrityError,
+        *,
+        expected_constraint: str,
+        detail: str,
+        class_id: UUID,
+    ) -> None:
+        constraint_name = get_constraint_name(error)
+        if constraint_name != expected_constraint:
+            raise error
+        logger.warning(
+            "Concurrent schedule conflict: class_id=%s, constraint=%s",
+            class_id,
+            constraint_name,
+        )
+        raise ScheduleConflictError(detail) from error
 
     async def _invalidate_schedule(self, class_id: UUID) -> None:
         if self.cache is None:

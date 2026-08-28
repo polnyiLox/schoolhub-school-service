@@ -1,16 +1,19 @@
 import logging
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import CacheNamespace, JsonCache
 from app.db.models import ClassMemberORM, SchoolClassORM, SubjectORM
+from app.db.integrity import get_constraint_name
 from app.enums import GlobalRole
 from app.exceptions import (
     ClassMemberAlreadyExistsError,
     ClassMemberNotFoundError,
     ClassNotFoundError,
     SubjectDoesNotBelongToClassError,
+    SubjectInUseError,
     SubjectNotFoundError,
 )
 from app.repositories import ClassMemberRepository, SchoolClassRepository, SubjectRepository
@@ -111,18 +114,28 @@ class ClassMemberService(EventCollectingService):
     async def add(self, class_id: UUID, data: ClassMemberCreate, actor: CurrentUser, correlation_id: str | None = None) -> ClassMemberORM:
         logger.info("Adding class member: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            if await self.class_repository.get_by_id(class_id) is None:
-                logger.warning("Cannot add member because class was not found: class_id=%s", class_id)
-                raise ClassNotFoundError()
-            if await self.repository.get(class_id, data.telegram_id) is not None:
-                logger.warning("Class member already exists: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
-                raise ClassMemberAlreadyExistsError()
-            entity = await self.repository.create(
-                class_id=class_id,
-                telegram_id=data.telegram_id,
-                role=data.role,
+        try:
+            async with self.session.begin():
+                if await self.class_repository.get_by_id(class_id) is None:
+                    logger.warning("Cannot add member because class was not found: class_id=%s", class_id)
+                    raise ClassNotFoundError()
+                if await self.repository.get(class_id, data.telegram_id) is not None:
+                    logger.warning("Class member already exists: class_id=%s, telegram_id=%s", class_id, data.telegram_id)
+                    raise ClassMemberAlreadyExistsError()
+                entity = await self.repository.create(
+                    class_id=class_id,
+                    telegram_id=data.telegram_id,
+                    role=data.role,
+                )
+        except IntegrityError as error:
+            if get_constraint_name(error) != "uq_class_member_telegram":
+                raise
+            logger.warning(
+                "Concurrent class member creation conflict: class_id=%s, telegram_id=%s",
+                class_id,
+                data.telegram_id,
             )
+            raise ClassMemberAlreadyExistsError() from error
         self.pending_events.append(build_domain_event(
             event_type="class.member_added", aggregate_type="class_member", aggregate_id=entity.id,
             actor_telegram_id=actor.telegram_id, class_id=class_id, correlation_id=correlation_id,
@@ -217,9 +230,21 @@ class SubjectService(EventCollectingService):
     async def delete(self, class_id: UUID, subject_id: UUID, actor: CurrentUser) -> None:
         logger.info("Deleting subject: class_id=%s, subject_id=%s", class_id, subject_id)
         self.access.require_admin(actor)
-        async with self.session.begin():
-            entity = await self._get_for_class(class_id, subject_id)
-            await self.repository.delete(entity)
+        try:
+            async with self.session.begin():
+                entity = await self._get_for_class(class_id, subject_id)
+                await self.repository.delete(entity)
+        except IntegrityError as error:
+            constraint_name = get_constraint_name(error)
+            if constraint_name is None or not constraint_name.endswith("_subject_id_fkey"):
+                raise
+            logger.warning(
+                "Subject deletion conflict: class_id=%s, subject_id=%s, constraint=%s",
+                class_id,
+                subject_id,
+                constraint_name,
+            )
+            raise SubjectInUseError() from error
         self._add_event("subject.deleted", entity, actor)
         await self._invalidate_schedule(class_id)
         logger.info("subject deleted", extra={"class_id": str(class_id), "subject_id": str(subject_id)})

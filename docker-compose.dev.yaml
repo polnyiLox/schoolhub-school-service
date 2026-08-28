@@ -25,6 +25,22 @@ services:
       retries: 10
 
 
+  redis:
+    image: redis:8-alpine
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_dev_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
   kafka:
     image: apache/kafka:4.0.0
 
@@ -127,6 +143,8 @@ services:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 
   prometheus:
@@ -179,6 +197,7 @@ services:
 
 volumes:
   postgres_dev_data:
+  redis_dev_data:
   kafka_dev_data:
   prometheus_dev_data:
   loki_dev_data:

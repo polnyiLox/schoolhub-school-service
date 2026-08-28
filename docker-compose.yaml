@@ -28,6 +28,24 @@ services:
       start_period: 10s
 
 
+  redis:
+    image: redis:8-alpine
+
+    restart: unless-stopped
+
+    volumes:
+      - redis_data:/data
+
+    expose:
+      - "6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+
   kafka:
     image: apache/kafka:4.0.0
 
@@ -122,6 +140,8 @@ services:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
     healthcheck:
       test:
@@ -196,6 +216,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   kafka_data:
   prometheus_data:
   loki_data:

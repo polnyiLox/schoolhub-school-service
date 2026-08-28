@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -16,6 +17,9 @@ class SchoolEventCreate(BaseModel):
 
 
 class SchoolEventUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"title", "event_type", "starts_at"}
+    )
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     event_type: SchoolEventType | None = None

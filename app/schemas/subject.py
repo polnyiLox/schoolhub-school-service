@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -12,6 +13,7 @@ class SubjectCreate(BaseModel):
 
 
 class SubjectUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"name"})
     name: str | None = Field(default=None, min_length=1, max_length=150)
     teacher_name: str | None = Field(default=None, max_length=200)
 

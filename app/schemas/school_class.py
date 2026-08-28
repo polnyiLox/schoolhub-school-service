@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,9 @@ class SchoolClassCreate(BaseModel):
 
 
 class SchoolClassUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"name", "academic_year", "is_archived"}
+    )
     name: str | None = Field(default=None, min_length=1, max_length=100)
     academic_year: str | None = Field(default=None, pattern=r"^\d{4}/\d{4}$")
     is_archived: bool | None = None

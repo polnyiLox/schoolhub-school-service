@@ -1,5 +1,6 @@
 from datetime import date as date_type
 from datetime import datetime
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,9 @@ class HomeworkCreate(BaseModel):
 
 
 class HomeworkUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"subject_id", "assigned_date", "due_date", "text"}
+    )
     subject_id: UUID | None = None
     assigned_date: date_type | None = None
     due_date: date_type | None = None

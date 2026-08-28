@@ -1,5 +1,6 @@
 from datetime import date as date_type
 from datetime import datetime, time
+from typing import ClassVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -25,6 +26,9 @@ class ScheduleEntryCreate(BaseModel):
 
 
 class ScheduleEntryUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"subject_id", "weekday", "lesson_number", "start_time", "end_time"}
+    )
     subject_id: UUID | None = None
     weekday: int | None = Field(default=None, ge=0, le=6)
     lesson_number: int | None = Field(default=None, gt=0)
@@ -58,6 +62,9 @@ class ScheduleOverrideCreate(BaseModel):
 
 
 class ScheduleOverrideUpdate(NonEmptyUpdateModel):
+    non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"date", "lesson_number", "override_type"}
+    )
     date: date_type | None = None
     lesson_number: int | None = Field(default=None, gt=0)
     override_type: ScheduleOverrideType | None = None

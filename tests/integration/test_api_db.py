@@ -4,7 +4,9 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from unittest.mock import AsyncMock
 
+from app.api.dependencies import get_kafka_producer
 from app.db.session import get_session
 from app.enums import ClassMemberRole
 from app.main import app
@@ -25,6 +27,7 @@ async def api_client(session):
         yield session
 
     app.dependency_overrides[get_session] = session_override
+    app.dependency_overrides[get_kafka_producer] = lambda: AsyncMock()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         yield client
     app.dependency_overrides.clear()

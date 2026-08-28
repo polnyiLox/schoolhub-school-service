@@ -2,7 +2,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from app.api.dependencies import CurrentUserDep, SubjectServiceDep
+from app.api.dependencies import CurrentUserDep, KafkaProducerDep, SubjectServiceDep
+from app.api.event_publishing import execute_and_publish
 from app.schemas import SubjectCreate, SubjectRead, SubjectUpdate
 
 router = APIRouter(prefix="/{class_id}/subjects", tags=["Subjects"])
@@ -23,8 +24,13 @@ async def create_subject(
     payload: SubjectCreate,
     actor: CurrentUserDep,
     service: SubjectServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.create(class_id, payload, actor)
+    return await execute_and_publish(
+        service.create(class_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.patch("/{subject_id}", response_model=SubjectRead)
@@ -34,8 +40,13 @@ async def update_subject(
     payload: SubjectUpdate,
     actor: CurrentUserDep,
     service: SubjectServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.update(class_id, subject_id, payload, actor)
+    return await execute_and_publish(
+        service.update(class_id, subject_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.delete("/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -44,6 +55,11 @@ async def delete_subject(
     subject_id: UUID,
     actor: CurrentUserDep,
     service: SubjectServiceDep,
+    producer: KafkaProducerDep,
 ) -> Response:
-    await service.delete(class_id, subject_id, actor)
+    await execute_and_publish(
+        service.delete(class_id, subject_id, actor),
+        service,
+        producer,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

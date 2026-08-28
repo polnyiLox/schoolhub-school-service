@@ -4,7 +4,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Path, Response, status
 
-from app.api.dependencies import CurrentUserDep, ScheduleServiceDep
+from app.api.dependencies import CurrentUserDep, KafkaProducerDep, ScheduleServiceDep
+from app.api.event_publishing import execute_and_publish
 from app.schemas import (
     ScheduleDayRead,
     ScheduleEntryCreate,
@@ -53,8 +54,13 @@ async def create_schedule_entry(
     payload: ScheduleEntryCreate,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.create_entry(class_id, payload, actor)
+    return await execute_and_publish(
+        service.create_entry(class_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.patch("/{schedule_entry_id}", response_model=ScheduleEntryRead)
@@ -64,8 +70,13 @@ async def update_schedule_entry(
     payload: ScheduleEntryUpdate,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.update_entry(class_id, schedule_entry_id, payload, actor)
+    return await execute_and_publish(
+        service.update_entry(class_id, schedule_entry_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.delete("/{schedule_entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -74,8 +85,13 @@ async def delete_schedule_entry(
     schedule_entry_id: UUID,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ) -> Response:
-    await service.delete_entry(class_id, schedule_entry_id, actor)
+    await execute_and_publish(
+        service.delete_entry(class_id, schedule_entry_id, actor),
+        service,
+        producer,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -89,8 +105,13 @@ async def create_schedule_override(
     payload: ScheduleOverrideCreate,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.create_override(class_id, payload, actor)
+    return await execute_and_publish(
+        service.create_override(class_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.patch("/overrides/{override_id}", response_model=ScheduleOverrideRead)
@@ -100,8 +121,13 @@ async def update_schedule_override(
     payload: ScheduleOverrideUpdate,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.update_override(class_id, override_id, payload, actor)
+    return await execute_and_publish(
+        service.update_override(class_id, override_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.delete("/overrides/{override_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -110,6 +136,11 @@ async def delete_schedule_override(
     override_id: UUID,
     actor: CurrentUserDep,
     service: ScheduleServiceDep,
+    producer: KafkaProducerDep,
 ) -> Response:
-    await service.delete_override(class_id, override_id, actor)
+    await execute_and_publish(
+        service.delete_override(class_id, override_id, actor),
+        service,
+        producer,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

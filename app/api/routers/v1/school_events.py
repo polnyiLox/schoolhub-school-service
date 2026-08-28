@@ -2,7 +2,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from app.api.dependencies import CurrentUserDep, EventServiceDep
+from app.api.dependencies import CurrentUserDep, EventServiceDep, KafkaProducerDep
+from app.api.event_publishing import execute_and_publish
 from app.schemas import SchoolEventCreate, SchoolEventRead, SchoolEventUpdate
 
 router = APIRouter(prefix="/{class_id}/events", tags=["School events"])
@@ -33,8 +34,13 @@ async def create_event(
     payload: SchoolEventCreate,
     actor: CurrentUserDep,
     service: EventServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.create(class_id, payload, actor)
+    return await execute_and_publish(
+        service.create(class_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.patch("/{event_id}", response_model=SchoolEventRead)
@@ -44,8 +50,13 @@ async def update_event(
     payload: SchoolEventUpdate,
     actor: CurrentUserDep,
     service: EventServiceDep,
+    producer: KafkaProducerDep,
 ):
-    return await service.update(class_id, event_id, payload, actor)
+    return await execute_and_publish(
+        service.update(class_id, event_id, payload, actor),
+        service,
+        producer,
+    )
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -54,6 +65,11 @@ async def delete_event(
     event_id: UUID,
     actor: CurrentUserDep,
     service: EventServiceDep,
+    producer: KafkaProducerDep,
 ) -> Response:
-    await service.delete(class_id, event_id, actor)
+    await execute_and_publish(
+        service.delete(class_id, event_id, actor),
+        service,
+        producer,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

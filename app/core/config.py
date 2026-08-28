@@ -7,25 +7,31 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DataBaseSettings(BaseModel):
-    user: str
-    password: str
-    host: str
-    port: int
-    name: str
+    user: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    host: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65_535)
+    name: str = Field(min_length=1)
+    pool_size: int = Field(default=10, ge=1)
+    max_overflow: int = Field(default=20, ge=0)
+    pool_recycle_seconds: int = Field(default=1_800, ge=1)
 
     @property
     def url(self) -> str:
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        user = quote(self.user, safe="")
+        password = quote(self.password, safe="")
+        database = quote(self.name, safe="")
+        return f"postgresql+asyncpg://{user}:{password}@{self.host}:{self.port}/{database}"
 
 
 class ApiSettings(BaseModel):
-    v1_prefix: str
-    host: str
-    port: int
+    v1_prefix: str = Field(pattern=r"^/[^/].*$")
+    host: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65_535)
     reload: bool
 
 
-class MIddlewareSettings(BaseModel):
+class MiddlewareSettings(BaseModel):
     allow_origins: list[str]
     allow_methods: list[str]
     allow_headers: list[str]
@@ -33,21 +39,21 @@ class MIddlewareSettings(BaseModel):
 
 
 class KafkaSettings(BaseModel):
-    bootstrap_servers: str = "kafka:29092"
-    client_id: str = "school-service"
-    acks: Literal[0, 1, "all"] = "all"
-    topic: str = "school.events"
-    request_timeout_ms: int = 10_000
+    bootstrap_servers: str = Field(default="kafka:29092", min_length=1)
+    client_id: str = Field(default="school-service", min_length=1)
+    acks: Literal["all"] = "all"
+    topic: str = Field(default="school.events", min_length=1)
+    request_timeout_ms: int = Field(default=10_000, ge=1_000)
 
 
 class RedisSettings(BaseModel):
     user: str | None = None
     password: str | None = None
-    host: str = "localhost"
-    port: int = 6379
-    database: int = 0
-    default_ttl_seconds: int = 300
-    key_prefix: str = "school-service"
+    host: str = Field(default="localhost", min_length=1)
+    port: int = Field(default=6379, ge=1, le=65_535)
+    database: int = Field(default=0, ge=0)
+    default_ttl_seconds: int = Field(default=300, ge=1)
+    key_prefix: str = Field(default="school-service", min_length=1)
 
     @property
     def url(self) -> str:
@@ -60,12 +66,17 @@ class RedisSettings(BaseModel):
         return f"redis://{credentials}{self.host}:{self.port}/{self.database}"
 
 
+class LoggingSettings(BaseModel):
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+
 class Settings(BaseSettings):
     db: DataBaseSettings
     api: ApiSettings
-    middleware: MIddlewareSettings
+    middleware: MiddlewareSettings
     kafka: KafkaSettings = Field(default_factory=KafkaSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env",

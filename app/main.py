@@ -14,7 +14,7 @@ from app.core.logging import configure_logging
 from app.db.session import engine_dispose
 
 
-configure_logging()
+configure_logging(settings.logging.level)
 logger = logging.getLogger(__name__)
 
 

@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,10 +31,19 @@ class MIddlewareSettings(BaseModel):
     allow_credentials: bool
 
 
+class KafkaSettings(BaseModel):
+    bootstrap_servers: str = "kafka:29092"
+    client_id: str = "school-service"
+    acks: Literal[0, 1, "all"] = "all"
+    topic: str = "school.events"
+    request_timeout_ms: int = 10_000
+
+
 class Settings(BaseSettings):
     db: DataBaseSettings
     api: ApiSettings
     middleware: MIddlewareSettings
+    kafka: KafkaSettings = Field(default_factory=KafkaSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env",

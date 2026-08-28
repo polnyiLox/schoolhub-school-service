@@ -5,6 +5,7 @@ description = "SchoolHub classes, schedules, homework and events service"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "aiokafka>=0.14.0",
     "alembic>=1.19.1",
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",

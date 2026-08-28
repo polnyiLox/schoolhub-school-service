@@ -5,6 +5,7 @@ from fastapi import Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.broker import KafkaProducer, kafka_producer
+from app.cache import JsonCache, json_cache
 from app.db.session import get_session
 from app.enums import GlobalRole
 from app.repositories import (
@@ -52,6 +53,13 @@ def get_kafka_producer() -> KafkaProducer:
 
 
 KafkaProducerDep = Annotated[KafkaProducer, Depends(get_kafka_producer)]
+
+
+def get_json_cache() -> JsonCache:
+    return json_cache
+
+
+JsonCacheDep = Annotated[JsonCache, Depends(get_json_cache)]
 
 
 def get_class_repository(session: SessionDep) -> SchoolClassRepository:
@@ -108,9 +116,10 @@ def get_subject_service(session: SessionDep, repo: SubjectRepoDep, access: Acces
 
 
 def get_schedule_service(
-    session: SessionDep, repo: ScheduleRepoDep, subject_repo: SubjectRepoDep, access: AccessDep
+    session: SessionDep, repo: ScheduleRepoDep, subject_repo: SubjectRepoDep,
+    access: AccessDep, cache: JsonCacheDep,
 ) -> ScheduleService:
-    return ScheduleService(session, repo, subject_repo, access)
+    return ScheduleService(session, repo, subject_repo, access, cache)
 
 
 def get_homework_service(

@@ -2,8 +2,10 @@ import logging
 from datetime import date, time, timedelta
 from uuid import UUID
 
+from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import CacheNamespace, JsonCache
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
 from app.enums import ScheduleLessonStatus, ScheduleOverrideType
 from app.exceptions import (
@@ -32,6 +34,8 @@ from app.services.access import ClassAccessService
 from app.services.base import EventCollectingService
 
 logger = logging.getLogger(__name__)
+schedule_day_adapter = TypeAdapter(ScheduleDayRead)
+schedule_week_adapter = TypeAdapter(ScheduleWeekRead)
 
 
 def merge_schedule(
@@ -77,25 +81,69 @@ class ScheduleService(EventCollectingService):
     def __init__(
         self, session: AsyncSession, repository: ScheduleRepository,
         subject_repository: SubjectRepository, access: ClassAccessService,
+        cache: JsonCache | None = None,
     ) -> None:
         super().__init__()
         self.session = session
         self.repository = repository
         self.subject_repository = subject_repository
         self.access = access
+        self.cache = cache
 
     async def get_day(self, class_id: UUID, target_date: date, actor: CurrentUser) -> ScheduleDayRead:
         await self.access.require_member(class_id, actor)
+        return await self._get_day(class_id, target_date)
+
+    async def _get_day(self, class_id: UUID, target_date: date) -> ScheduleDayRead:
+        if self.cache is not None:
+            cached = await self.cache.get(
+                CacheNamespace.SCHEDULE_DAY,
+                class_id,
+                target_date.isoformat(),
+                adapter=schedule_day_adapter,
+            )
+            if cached is not None:
+                return cached
+
         base = await self.repository.list_for_weekday(class_id, target_date.weekday())
         overrides = await self.repository.list_overrides(class_id, target_date)
-        return merge_schedule(target_date, base, overrides)
+        result = merge_schedule(target_date, base, overrides)
+        if self.cache is not None:
+            await self.cache.set(
+                CacheNamespace.SCHEDULE_DAY,
+                result,
+                class_id,
+                target_date.isoformat(),
+                adapter=schedule_day_adapter,
+            )
+        return result
 
     async def get_week(self, class_id: UUID, start_date: date, actor: CurrentUser) -> ScheduleWeekRead:
+        await self.access.require_member(class_id, actor)
         monday = start_date - timedelta(days=start_date.weekday())
+        if self.cache is not None:
+            cached = await self.cache.get(
+                CacheNamespace.SCHEDULE_WEEK,
+                class_id,
+                monday.isoformat(),
+                adapter=schedule_week_adapter,
+            )
+            if cached is not None:
+                return cached
+
         days: list[ScheduleDayRead] = []
         for offset in range(7):
-            days.append(await self.get_day(class_id, monday + timedelta(days=offset), actor))
-        return ScheduleWeekRead(days=days)
+            days.append(await self._get_day(class_id, monday + timedelta(days=offset)))
+        result = ScheduleWeekRead(days=days)
+        if self.cache is not None:
+            await self.cache.set(
+                CacheNamespace.SCHEDULE_WEEK,
+                result,
+                class_id,
+                monday.isoformat(),
+                adapter=schedule_week_adapter,
+            )
+        return result
 
     async def create_entry(self, class_id: UUID, data: ScheduleEntryCreate, actor: CurrentUser) -> ScheduleEntryORM:
         self.access.require_admin(actor)
@@ -113,6 +161,7 @@ class ScheduleService(EventCollectingService):
                 room=data.room,
             )
         self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule changed", extra={"class_id": str(class_id), "schedule_entry_id": str(entity.id)})
         return entity
 
@@ -133,6 +182,7 @@ class ScheduleService(EventCollectingService):
                 raise ScheduleConflictError()
             entity = await self.repository.update_entry(entity, changes)
         self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule changed", extra={"class_id": str(class_id), "schedule_entry_id": str(entry_id)})
         return entity
 
@@ -142,6 +192,7 @@ class ScheduleService(EventCollectingService):
             entity = await self._get_entry(class_id, entry_id)
             await self.repository.delete_entry(entity)
         self._add_event("schedule.deleted", "schedule", entry_id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule changed", extra={"class_id": str(class_id), "schedule_entry_id": str(entry_id)})
 
     async def create_override(self, class_id: UUID, data: ScheduleOverrideCreate, actor: CurrentUser) -> ScheduleOverrideORM:
@@ -163,6 +214,7 @@ class ScheduleService(EventCollectingService):
                 created_by_telegram_id=actor.telegram_id,
             )
         self._add_event("schedule.override_created", "schedule_override", entity.id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule override created", extra={"class_id": str(class_id), "override_id": str(entity.id)})
         return entity
 
@@ -183,6 +235,7 @@ class ScheduleService(EventCollectingService):
                 raise ScheduleConflictError("An override already exists for this lesson")
             entity = await self.repository.update_override(entity, changes)
         self._add_event("schedule.override_updated", "schedule_override", entity.id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule override updated", extra={"class_id": str(class_id), "override_id": str(override_id)})
         return entity
 
@@ -192,6 +245,7 @@ class ScheduleService(EventCollectingService):
             entity = await self._get_override(class_id, override_id)
             await self.repository.delete_override(entity)
         self._add_event("schedule.override_deleted", "schedule_override", override_id, class_id, actor)
+        await self._invalidate_schedule(class_id)
         logger.info("schedule override deleted", extra={"class_id": str(class_id), "override_id": str(override_id)})
 
     async def _get_entry(self, class_id: UUID, entry_id: UUID) -> ScheduleEntryORM:
@@ -238,3 +292,9 @@ class ScheduleService(EventCollectingService):
             actor_telegram_id=actor.telegram_id, class_id=class_id,
             payload={"entity_id": str(aggregate_id)},
         ))
+
+    async def _invalidate_schedule(self, class_id: UUID) -> None:
+        if self.cache is None:
+            return
+        await self.cache.invalidate_pattern(CacheNamespace.SCHEDULE_DAY, class_id)
+        await self.cache.invalidate_pattern(CacheNamespace.SCHEDULE_WEEK, class_id)

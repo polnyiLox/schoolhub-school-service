@@ -17,11 +17,19 @@ from app.db.session import engine_dispose
 configure_logging()
 logger = logging.getLogger(__name__)
 
+
+async def connect_cache() -> None:
+    try:
+        await redis_cache.connect()
+    except Exception:
+        logger.warning("Redis is unavailable; starting without cache")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("Starting school-service")
     try:
-        await redis_cache.connect()
+        await connect_cache()
         await kafka_client.connect_producer()
         logger.info("School-service started")
         yield

@@ -51,7 +51,7 @@ class RedisCache(Cache):
         await client.aclose()
         logger.info("Closed Redis connection")
 
-    async def get(self, key: str) -> bytes | None:
+    async def get(self, key: str) -> bytes | str | None:
         client = await self.get_redis()
         logger.debug("Reading Redis key: key=%s", key)
         try:
@@ -99,4 +99,3 @@ class RedisCache(Cache):
         except Exception:
             logger.exception("Redis pattern delete failed: pattern=%s", pattern)
             raise
-

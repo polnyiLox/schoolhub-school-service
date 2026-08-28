@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class Cache(ABC):
     @abstractmethod
-    async def get(self, key: str) -> bytes | None:
+    async def get(self, key: str) -> bytes | None | str:
         raise NotImplementedError
 
     @abstractmethod

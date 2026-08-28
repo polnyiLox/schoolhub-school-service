@@ -6,11 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.broker import KafkaProducer, kafka_producer
 from app.cache import JsonCache, json_cache
+from app.core.config import settings
 from app.db.session import get_session
 from app.enums import GlobalRole
 from app.repositories import (
     ClassMemberRepository,
     HomeworkRepository,
+    OutboxRepository,
     ScheduleRepository,
     SchoolClassRepository,
     SchoolEventRepository,
@@ -86,12 +88,17 @@ def get_event_repository(session: SessionDep) -> SchoolEventRepository:
     return SchoolEventRepository(session)
 
 
+def get_outbox_repository(session: SessionDep) -> OutboxRepository:
+    return OutboxRepository(session, settings.kafka.topic)
+
+
 ClassRepoDep = Annotated[SchoolClassRepository, Depends(get_class_repository)]
 MemberRepoDep = Annotated[ClassMemberRepository, Depends(get_member_repository)]
 SubjectRepoDep = Annotated[SubjectRepository, Depends(get_subject_repository)]
 ScheduleRepoDep = Annotated[ScheduleRepository, Depends(get_schedule_repository)]
 HomeworkRepoDep = Annotated[HomeworkRepository, Depends(get_homework_repository)]
 EventRepoDep = Annotated[SchoolEventRepository, Depends(get_event_repository)]
+OutboxRepoDep = Annotated[OutboxRepository, Depends(get_outbox_repository)]
 
 
 def get_access_service(class_repo: ClassRepoDep, member_repo: MemberRepoDep) -> ClassAccessService:
@@ -102,15 +109,19 @@ AccessDep = Annotated[ClassAccessService, Depends(get_access_service)]
 
 
 def get_class_service(
-    session: SessionDep, repo: ClassRepoDep, access: AccessDep
+    session: SessionDep, repo: ClassRepoDep, access: AccessDep, outbox: OutboxRepoDep
 ) -> SchoolClassService:
-    return SchoolClassService(session, repo, access)
+    return SchoolClassService(session, repo, access, outbox)
 
 
 def get_member_service(
-    session: SessionDep, repo: MemberRepoDep, class_repo: ClassRepoDep, access: AccessDep
+    session: SessionDep,
+    repo: MemberRepoDep,
+    class_repo: ClassRepoDep,
+    access: AccessDep,
+    outbox: OutboxRepoDep,
 ) -> ClassMemberService:
-    return ClassMemberService(session, repo, class_repo, access)
+    return ClassMemberService(session, repo, class_repo, access, outbox)
 
 
 def get_subject_service(
@@ -118,8 +129,9 @@ def get_subject_service(
     repo: SubjectRepoDep,
     access: AccessDep,
     cache: JsonCacheDep,
+    outbox: OutboxRepoDep,
 ) -> SubjectService:
-    return SubjectService(session, repo, access, cache)
+    return SubjectService(session, repo, access, cache, outbox)
 
 
 def get_schedule_service(
@@ -128,8 +140,9 @@ def get_schedule_service(
     subject_repo: SubjectRepoDep,
     access: AccessDep,
     cache: JsonCacheDep,
+    outbox: OutboxRepoDep,
 ) -> ScheduleService:
-    return ScheduleService(session, repo, subject_repo, access, cache)
+    return ScheduleService(session, repo, subject_repo, access, cache, outbox)
 
 
 def get_homework_service(
@@ -138,14 +151,15 @@ def get_homework_service(
     subject_repo: SubjectRepoDep,
     access: AccessDep,
     cache: JsonCacheDep,
+    outbox: OutboxRepoDep,
 ) -> HomeworkService:
-    return HomeworkService(session, repo, subject_repo, access, cache)
+    return HomeworkService(session, repo, subject_repo, access, cache, outbox)
 
 
 def get_event_service(
-    session: SessionDep, repo: EventRepoDep, access: AccessDep
+    session: SessionDep, repo: EventRepoDep, access: AccessDep, outbox: OutboxRepoDep
 ) -> SchoolEventService:
-    return SchoolEventService(session, repo, access)
+    return SchoolEventService(session, repo, access, outbox)
 
 
 ClassServiceDep = Annotated[SchoolClassService, Depends(get_class_service)]

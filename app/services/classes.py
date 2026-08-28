@@ -16,7 +16,12 @@ from app.exceptions import (
     SubjectInUseError,
     SubjectNotFoundError,
 )
-from app.repositories import ClassMemberRepository, SchoolClassRepository, SubjectRepository
+from app.repositories import (
+    ClassMemberRepository,
+    OutboxRepository,
+    SchoolClassRepository,
+    SubjectRepository,
+)
 from app.schemas import (
     ClassMemberCreate,
     ClassMemberUpdate,
@@ -35,9 +40,13 @@ logger = logging.getLogger(__name__)
 
 class SchoolClassService(EventCollectingService):
     def __init__(
-        self, session: AsyncSession, repository: SchoolClassRepository, access: ClassAccessService
+        self,
+        session: AsyncSession,
+        repository: SchoolClassRepository,
+        access: ClassAccessService,
+        outbox_repository: OutboxRepository | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(outbox_repository)
         self.session = session
         self.repository = repository
         self.access = access
@@ -52,17 +61,17 @@ class SchoolClassService(EventCollectingService):
                 name=data.name,
                 academic_year=data.academic_year,
             )
-        self.pending_events.append(
-            build_domain_event(
-                event_type="class.created",
-                aggregate_type="class",
-                aggregate_id=entity.id,
-                actor_telegram_id=actor.telegram_id,
-                class_id=entity.id,
-                correlation_id=correlation_id,
-                payload={"name": entity.name, "academic_year": entity.academic_year},
+            self.record_event(
+                build_domain_event(
+                    event_type="class.created",
+                    aggregate_type="class",
+                    aggregate_id=entity.id,
+                    actor_telegram_id=actor.telegram_id,
+                    class_id=entity.id,
+                    correlation_id=correlation_id,
+                    payload={"name": entity.name, "academic_year": entity.academic_year},
+                )
             )
-        )
         logger.info(
             "class created",
             extra={
@@ -106,6 +115,16 @@ class SchoolClassService(EventCollectingService):
                 entity,
                 data.model_dump(exclude_unset=True),
             )
+            self.record_event(
+                build_domain_event(
+                    event_type="class.updated",
+                    aggregate_type="class",
+                    aggregate_id=entity.id,
+                    actor_telegram_id=actor.telegram_id,
+                    class_id=entity.id,
+                    payload={"changed_fields": sorted(data.model_fields_set)},
+                )
+            )
         logger.info(
             "class updated", extra={"class_id": str(class_id), "telegram_id": actor.telegram_id}
         )
@@ -119,8 +138,9 @@ class ClassMemberService(EventCollectingService):
         repository: ClassMemberRepository,
         class_repository: SchoolClassRepository,
         access: ClassAccessService,
+        outbox_repository: OutboxRepository | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(outbox_repository)
         self.session = session
         self.repository = repository
         self.class_repository = class_repository
@@ -161,6 +181,17 @@ class ClassMemberService(EventCollectingService):
                     telegram_id=data.telegram_id,
                     role=data.role,
                 )
+                self.record_event(
+                    build_domain_event(
+                        event_type="class.member_added",
+                        aggregate_type="class_member",
+                        aggregate_id=entity.id,
+                        actor_telegram_id=actor.telegram_id,
+                        class_id=class_id,
+                        correlation_id=correlation_id,
+                        payload={"telegram_id": entity.telegram_id, "role": entity.role.value},
+                    )
+                )
         except IntegrityError as error:
             if get_constraint_name(error) != "uq_class_member_telegram":
                 raise
@@ -170,17 +201,6 @@ class ClassMemberService(EventCollectingService):
                 data.telegram_id,
             )
             raise ClassMemberAlreadyExistsError() from error
-        self.pending_events.append(
-            build_domain_event(
-                event_type="class.member_added",
-                aggregate_type="class_member",
-                aggregate_id=entity.id,
-                actor_telegram_id=actor.telegram_id,
-                class_id=class_id,
-                correlation_id=correlation_id,
-                payload={"telegram_id": entity.telegram_id, "role": entity.role.value},
-            )
-        )
         logger.info(
             "member added", extra={"class_id": str(class_id), "telegram_id": data.telegram_id}
         )
@@ -199,16 +219,16 @@ class ClassMemberService(EventCollectingService):
                 )
                 raise ClassMemberNotFoundError()
             entity = await self.repository.update(entity, data.model_dump())
-        self.pending_events.append(
-            build_domain_event(
-                event_type="class.member_role_changed",
-                aggregate_type="class_member",
-                aggregate_id=entity.id,
-                actor_telegram_id=actor.telegram_id,
-                class_id=class_id,
-                payload={"telegram_id": telegram_id, "role": entity.role.value},
+            self.record_event(
+                build_domain_event(
+                    event_type="class.member_role_changed",
+                    aggregate_type="class_member",
+                    aggregate_id=entity.id,
+                    actor_telegram_id=actor.telegram_id,
+                    class_id=class_id,
+                    payload={"telegram_id": telegram_id, "role": entity.role.value},
+                )
             )
-        )
         logger.info(
             "member role changed", extra={"class_id": str(class_id), "telegram_id": telegram_id}
         )
@@ -226,16 +246,16 @@ class ClassMemberService(EventCollectingService):
                 raise ClassMemberNotFoundError()
             entity_id = entity.id
             await self.repository.delete(entity)
-        self.pending_events.append(
-            build_domain_event(
-                event_type="class.member_removed",
-                aggregate_type="class_member",
-                aggregate_id=entity_id,
-                actor_telegram_id=actor.telegram_id,
-                class_id=class_id,
-                payload={"telegram_id": telegram_id},
+            self.record_event(
+                build_domain_event(
+                    event_type="class.member_removed",
+                    aggregate_type="class_member",
+                    aggregate_id=entity_id,
+                    actor_telegram_id=actor.telegram_id,
+                    class_id=class_id,
+                    payload={"telegram_id": telegram_id},
+                )
             )
-        )
         logger.info("member removed", extra={"class_id": str(class_id), "telegram_id": telegram_id})
 
 
@@ -246,8 +266,9 @@ class SubjectService(EventCollectingService):
         repository: SubjectRepository,
         access: ClassAccessService,
         cache: JsonCache | None = None,
+        outbox_repository: OutboxRepository | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(outbox_repository)
         self.session = session
         self.repository = repository
         self.access = access
@@ -270,7 +291,7 @@ class SubjectService(EventCollectingService):
                 name=data.name,
                 teacher_name=data.teacher_name,
             )
-        self._add_event("subject.created", entity, actor)
+            self._add_event("subject.created", entity, actor)
         logger.info(
             "subject created", extra={"class_id": str(class_id), "subject_id": str(entity.id)}
         )
@@ -287,7 +308,7 @@ class SubjectService(EventCollectingService):
                 entity,
                 data.model_dump(exclude_unset=True),
             )
-        self._add_event("subject.updated", entity, actor)
+            self._add_event("subject.updated", entity, actor)
         await self._invalidate_schedule(class_id)
         logger.info(
             "subject updated", extra={"class_id": str(class_id), "subject_id": str(subject_id)}
@@ -301,6 +322,7 @@ class SubjectService(EventCollectingService):
             async with self.session.begin():
                 entity = await self._get_for_class(class_id, subject_id)
                 await self.repository.delete(entity)
+                self._add_event("subject.deleted", entity, actor)
         except IntegrityError as error:
             constraint_name = get_constraint_name(error)
             if constraint_name is None or not constraint_name.endswith("_subject_id_fkey"):
@@ -312,7 +334,6 @@ class SubjectService(EventCollectingService):
                 constraint_name,
             )
             raise SubjectInUseError() from error
-        self._add_event("subject.deleted", entity, actor)
         await self._invalidate_schedule(class_id)
         logger.info(
             "subject deleted", extra={"class_id": str(class_id), "subject_id": str(subject_id)}
@@ -331,7 +352,7 @@ class SubjectService(EventCollectingService):
         return entity
 
     def _add_event(self, event_type: str, entity: SubjectORM, actor: CurrentUser) -> None:
-        self.pending_events.append(
+        self.record_event(
             build_domain_event(
                 event_type=event_type,
                 aggregate_type="subject",

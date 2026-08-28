@@ -19,7 +19,7 @@ from app.exceptions import (
     SubjectDoesNotBelongToClassError,
     SubjectNotFoundError,
 )
-from app.repositories import ScheduleRepository, SubjectRepository
+from app.repositories import OutboxRepository, ScheduleRepository, SubjectRepository
 from app.schemas import (
     CurrentUser,
     ScheduleDayRead,
@@ -87,8 +87,9 @@ class ScheduleService(EventCollectingService):
         subject_repository: SubjectRepository,
         access: ClassAccessService,
         cache: JsonCache | None = None,
+        outbox_repository: OutboxRepository | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(outbox_repository)
         self.session = session
         self.repository = repository
         self.subject_repository = subject_repository
@@ -201,6 +202,7 @@ class ScheduleService(EventCollectingService):
                     end_time=data.end_time,
                     room=data.room,
                 )
+                self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -208,7 +210,6 @@ class ScheduleService(EventCollectingService):
                 detail="The schedule slot is already occupied",
                 class_id=class_id,
             )
-        self._add_event("schedule.created", "schedule", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry created: class_id=%s, entry_id=%s", class_id, entity.id)
         return entity
@@ -238,6 +239,7 @@ class ScheduleService(EventCollectingService):
                     )
                     raise ScheduleConflictError()
                 entity = await self.repository.update_entry(entity, changes)
+                self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -245,7 +247,6 @@ class ScheduleService(EventCollectingService):
                 detail="The schedule slot is already occupied",
                 class_id=class_id,
             )
-        self._add_event("schedule.updated", "schedule", entity.id, class_id, actor)
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry updated: class_id=%s, entry_id=%s", class_id, entry_id)
         return entity
@@ -256,7 +257,7 @@ class ScheduleService(EventCollectingService):
         async with self.session.begin():
             entity = await self._get_entry(class_id, entry_id)
             await self.repository.delete_entry(entity)
-        self._add_event("schedule.deleted", "schedule", entry_id, class_id, actor)
+            self._add_event("schedule.deleted", "schedule", entry_id, class_id, actor)
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry deleted: class_id=%s, entry_id=%s", class_id, entry_id)
 
@@ -296,6 +297,13 @@ class ScheduleService(EventCollectingService):
                     reason=data.reason,
                     created_by_telegram_id=actor.telegram_id,
                 )
+                self._add_event(
+                    "schedule.override_created",
+                    "schedule_override",
+                    entity.id,
+                    class_id,
+                    actor,
+                )
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -303,9 +311,6 @@ class ScheduleService(EventCollectingService):
                 detail="An override already exists for this lesson",
                 class_id=class_id,
             )
-        self._add_event(
-            "schedule.override_created", "schedule_override", entity.id, class_id, actor
-        )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override created: class_id=%s, override_id=%s", class_id, entity.id)
         return entity
@@ -341,6 +346,13 @@ class ScheduleService(EventCollectingService):
                     )
                     raise ScheduleConflictError("An override already exists for this lesson")
                 entity = await self.repository.update_override(entity, changes)
+                self._add_event(
+                    "schedule.override_updated",
+                    "schedule_override",
+                    entity.id,
+                    class_id,
+                    actor,
+                )
         except IntegrityError as error:
             self._raise_slot_conflict(
                 error,
@@ -348,9 +360,6 @@ class ScheduleService(EventCollectingService):
                 detail="An override already exists for this lesson",
                 class_id=class_id,
             )
-        self._add_event(
-            "schedule.override_updated", "schedule_override", entity.id, class_id, actor
-        )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override updated: class_id=%s, override_id=%s", class_id, override_id)
         return entity
@@ -363,9 +372,9 @@ class ScheduleService(EventCollectingService):
         async with self.session.begin():
             entity = await self._get_override(class_id, override_id)
             await self.repository.delete_override(entity)
-        self._add_event(
-            "schedule.override_deleted", "schedule_override", override_id, class_id, actor
-        )
+            self._add_event(
+                "schedule.override_deleted", "schedule_override", override_id, class_id, actor
+            )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override deleted: class_id=%s, override_id=%s", class_id, override_id)
 
@@ -440,7 +449,7 @@ class ScheduleService(EventCollectingService):
         class_id: UUID,
         actor: CurrentUser,
     ) -> None:
-        self.pending_events.append(
+        self.record_event(
             build_domain_event(
                 event_type=event_type,
                 aggregate_type=aggregate_type,

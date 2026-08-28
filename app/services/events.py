@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import SchoolEventORM
 from app.exceptions import InvalidSchoolEventDatesError, SchoolEventNotFoundError
-from app.repositories import SchoolEventRepository
+from app.repositories import OutboxRepository, SchoolEventRepository
 from app.schemas import CurrentUser, SchoolEventCreate, SchoolEventUpdate, build_domain_event
 from app.services.access import ClassAccessService
 from app.services.base import EventCollectingService
@@ -16,9 +16,13 @@ logger = logging.getLogger(__name__)
 
 class SchoolEventService(EventCollectingService):
     def __init__(
-        self, session: AsyncSession, repository: SchoolEventRepository, access: ClassAccessService
+        self,
+        session: AsyncSession,
+        repository: SchoolEventRepository,
+        access: ClassAccessService,
+        outbox_repository: OutboxRepository | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(outbox_repository)
         self.session = session
         self.repository = repository
         self.access = access
@@ -54,7 +58,7 @@ class SchoolEventService(EventCollectingService):
                 ends_at=data.ends_at,
                 created_by_telegram_id=actor.telegram_id,
             )
-        self._add_event("school_event.created", entity, actor)
+            self._add_event("school_event.created", entity, actor)
         logger.info(
             "school event created",
             extra={
@@ -77,7 +81,7 @@ class SchoolEventService(EventCollectingService):
             ends_at = changes.get("ends_at", entity.ends_at)
             self._validate_dates(starts_at, ends_at)
             entity = await self.repository.update(entity, changes)
-        self._add_event("school_event.updated", entity, actor)
+            self._add_event("school_event.updated", entity, actor)
         logger.info(
             "school event updated",
             extra={
@@ -94,7 +98,7 @@ class SchoolEventService(EventCollectingService):
         async with self.session.begin():
             entity = await self._get_for_class(class_id, event_id)
             await self.repository.delete(entity)
-        self._add_event("school_event.deleted", entity, actor)
+            self._add_event("school_event.deleted", entity, actor)
         logger.info(
             "school event deleted",
             extra={
@@ -120,7 +124,7 @@ class SchoolEventService(EventCollectingService):
             raise InvalidSchoolEventDatesError()
 
     def _add_event(self, event_type: str, entity: SchoolEventORM, actor: CurrentUser) -> None:
-        self.pending_events.append(
+        self.record_event(
             build_domain_event(
                 event_type=event_type,
                 aggregate_type="school_event",

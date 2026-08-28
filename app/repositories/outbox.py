@@ -9,13 +9,14 @@ from app.schemas import DomainEvent
 
 
 class OutboxRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, default_topic: str = "school.events") -> None:
         self.session = session
+        self.default_topic = default_topic
 
-    def enqueue(self, event: DomainEvent, topic: str) -> OutboxEventORM:
+    def enqueue(self, event: DomainEvent, topic: str | None = None) -> OutboxEventORM:
         entity = OutboxEventORM(
             id=event.event_id,
-            topic=topic,
+            topic=topic or self.default_topic,
             payload=event.model_dump(mode="json"),
         )
         self.session.add(entity)

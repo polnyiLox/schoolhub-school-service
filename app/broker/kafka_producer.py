@@ -21,11 +21,22 @@ class KafkaProducer:
         producer = await self._kafka_client.get_producer()
         target_topic = topic or self._settings.topic
 
-        await producer.send_and_wait(
-            topic=target_topic,
-            key=str(event.aggregate_id).encode("utf-8"),
-            value=event.model_dump_json().encode("utf-8"),
-        )
+        try:
+            await producer.send_and_wait(
+                topic=target_topic,
+                key=str(event.aggregate_id).encode("utf-8"),
+                value=event.model_dump_json().encode("utf-8"),
+            )
+        except Exception:
+            logger.exception(
+                "Kafka event publishing failed",
+                extra={
+                    "event_id": str(event.event_id),
+                    "event_type": event.event_type,
+                    "topic": target_topic,
+                },
+            )
+            raise
 
         logger.info(
             "Kafka event published",

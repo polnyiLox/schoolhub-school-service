@@ -30,9 +30,20 @@ class KafkaClient:
                 client_id=self._settings.client_id,
                 acks=self._settings.acks,
                 request_timeout_ms=self._settings.request_timeout_ms,
+                enable_idempotence=True,
+                linger_ms=self._settings.linger_ms,
+                compression_type=self._settings.compression_type,
             )
 
-            await producer.start()
+            try:
+                await producer.start()
+            except Exception:
+                logger.exception(
+                    "Kafka producer connection failed",
+                    extra={"client_id": self._settings.client_id},
+                )
+                await producer.stop()
+                raise
             self._producer = producer
             logger.info("Kafka producer connected", extra={"client_id": self._settings.client_id})
 

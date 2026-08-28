@@ -44,6 +44,8 @@ class KafkaSettings(BaseModel):
     acks: Literal["all"] = "all"
     topic: str = Field(default="school.events", min_length=1)
     request_timeout_ms: int = Field(default=10_000, ge=1_000)
+    linger_ms: int = Field(default=5, ge=0)
+    compression_type: Literal["gzip"] | None = "gzip"
 
 
 class RedisSettings(BaseModel):

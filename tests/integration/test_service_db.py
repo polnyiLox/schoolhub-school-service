@@ -150,14 +150,16 @@ async def test_outbox_enqueue_failure_rolls_back_business_change(session):
         school_class = await create_class(session)
         subject = await create_subject(session, school_class.id)
         await create_member(session, school_class.id, 20, ClassMemberRole.EDITOR)
+    class_id = school_class.id
+    subject_id = subject.id
     outbox = MagicMock(spec=OutboxRepository)
     outbox.enqueue.side_effect = RuntimeError("outbox write failed")
 
     with pytest.raises(RuntimeError, match="outbox write failed"):
         await homework_service(session, outbox).create(
-            school_class.id,
+            class_id,
             HomeworkCreate(
-                subject_id=subject.id,
+                subject_id=subject_id,
                 assigned_date=date(2026, 9, 14),
                 due_date=date(2026, 9, 15),
                 text="Task",
@@ -165,4 +167,4 @@ async def test_outbox_enqueue_failure_rolls_back_business_change(session):
             actor(20),
         )
 
-    assert await HomeworkRepository(session).list(school_class.id) == []
+    assert await HomeworkRepository(session).list(class_id) == []

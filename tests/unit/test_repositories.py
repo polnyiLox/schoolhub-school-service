@@ -9,10 +9,12 @@ from app.enums import ClassMemberRole
 from app.repositories import (
     ClassMemberRepository,
     HomeworkRepository,
+    OutboxRepository,
     SchoolClassRepository,
     SchoolEventRepository,
     SubjectRepository,
 )
+from app.schemas import build_domain_event
 
 
 def mock_session() -> MagicMock:
@@ -125,3 +127,42 @@ async def test_event_day_query_includes_events_overlapping_day():
     assert "school_events.ends_at >" in sql
     assert day_start in query.compile().params.values()
     assert day_end in query.compile().params.values()
+
+
+def test_outbox_repository_enqueues_serializable_domain_event() -> None:
+    session = mock_session()
+    event = build_domain_event(
+        event_type="homework.created",
+        aggregate_type="homework",
+        aggregate_id=uuid4(),
+        actor_telegram_id=42,
+        class_id=uuid4(),
+    )
+
+    entity = OutboxRepository(session).enqueue(event, "school.events")
+
+    assert entity.id == event.event_id
+    assert entity.topic == "school.events"
+    assert entity.payload["event_id"] == str(event.event_id)
+    assert entity.payload["occurred_at"] == event.occurred_at.isoformat().replace("+00:00", "Z")
+    session.add.assert_called_once_with(entity)
+
+
+@pytest.mark.asyncio
+async def test_outbox_repository_updates_delivery_state_with_statements() -> None:
+    session = mock_session()
+    repository = OutboxRepository(session)
+    event_id = uuid4()
+    now = datetime.now(UTC)
+
+    await repository.mark_published(event_id, now)
+    await repository.mark_retry(
+        event_id,
+        attempts=2,
+        available_at=now + timedelta(seconds=10),
+        last_error="Kafka unavailable",
+        terminal=False,
+    )
+
+    assert session.execute.await_count == 2
+    assert all(call.args[0].is_update for call in session.execute.await_args_list)

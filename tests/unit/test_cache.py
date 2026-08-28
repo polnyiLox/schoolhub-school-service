@@ -70,3 +70,32 @@ async def test_redis_cache_deletes_keys_found_by_pattern(monkeypatch) -> None:
 
     assert deleted == 2
     client.delete.assert_awaited_once_with(b"key:1", b"key:2")
+
+
+@pytest.mark.asyncio
+async def test_redis_cache_deletes_large_patterns_in_bounded_batches(monkeypatch) -> None:
+    client = redis_client()
+
+    async def scan_iter(**_: object):
+        for index in range(205):
+            yield f"key:{index}".encode()
+
+    client.scan_iter = scan_iter
+    client.delete.side_effect = lambda *keys: len(keys)
+    monkeypatch.setattr("app.cache.redis.Redis.from_url", MagicMock(return_value=client))
+    cache = RedisCache(RedisSettings(scan_batch_size=100))
+
+    assert await cache.delete_pattern("key:*") == 205
+    assert [len(call.args) for call in client.delete.await_args_list] == [100, 100, 5]
+
+
+@pytest.mark.asyncio
+async def test_redis_cache_rejects_non_positive_explicit_ttl(monkeypatch) -> None:
+    client = redis_client()
+    monkeypatch.setattr("app.cache.redis.Redis.from_url", MagicMock(return_value=client))
+    cache = RedisCache(RedisSettings())
+
+    with pytest.raises(ValueError, match="greater than zero"):
+        await cache.set("key", b"value", ttl_seconds=0)
+
+    client.set.assert_not_awaited()

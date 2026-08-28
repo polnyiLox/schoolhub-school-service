@@ -6,7 +6,12 @@ import pytest
 
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
 from app.enums import ScheduleOverrideType
-from app.exceptions import InvalidScheduleOverrideError, InvalidScheduleTimeError, ScheduleConflictError
+from app.exceptions import (
+    ClassNotFoundError,
+    InvalidScheduleOverrideError,
+    InvalidScheduleTimeError,
+    ScheduleConflictError,
+)
 from app.schemas import ScheduleDayRead, ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleOverrideCreate
 from app.services import ScheduleService
 
@@ -89,6 +94,25 @@ async def test_cancelled_override_does_not_require_subject(transaction_session, 
     entity = ScheduleOverrideORM(id=uuid4(), class_id=class_id, date=date(2026, 9, 14), lesson_number=2, override_type=ScheduleOverrideType.CANCELLED, created_by_telegram_id=admin.telegram_id)
     repository.create_override.return_value = entity
     assert await service.create_override(class_id, ScheduleOverrideCreate(date=entity.date, lesson_number=2, override_type=ScheduleOverrideType.CANCELLED), admin) is entity
+
+
+@pytest.mark.asyncio
+async def test_cancelled_override_requires_existing_class(transaction_session, admin):
+    tested, repository = dependencies(transaction_session, uuid4(), uuid4())
+    tested.access.require_member.side_effect = ClassNotFoundError()
+
+    with pytest.raises(ClassNotFoundError):
+        await tested.create_override(
+            uuid4(),
+            ScheduleOverrideCreate(
+                date=date(2026, 9, 14),
+                lesson_number=2,
+                override_type=ScheduleOverrideType.CANCELLED,
+            ),
+            admin,
+        )
+
+    repository.create_override.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ import pytest
 from app.db.models import ClassMemberORM, SchoolClassORM
 from app.enums import ClassMemberRole
 from app.exceptions import ClassAccessDeniedError, ClassMemberAlreadyExistsError
-from app.schemas import ClassMemberCreate, SchoolClassCreate
+from app.schemas import ClassMemberCreate, ClassMemberUpdate, SchoolClassCreate
 from app.services import ClassMemberService, SchoolClassService
 
 
@@ -53,3 +53,32 @@ async def test_duplicate_member_is_rejected(transaction_session, admin):
         await ClassMemberService(transaction_session, repository, classes, access).add(
             class_id, ClassMemberCreate(telegram_id=20, role=ClassMemberRole.STUDENT), admin
         )
+
+
+@pytest.mark.asyncio
+async def test_admin_can_promote_student_to_editor(transaction_session, admin):
+    class_id = uuid4()
+    repository, classes, access = AsyncMock(), AsyncMock(), MagicMock()
+    member = ClassMemberORM(
+        id=uuid4(), class_id=class_id, telegram_id=20, role=ClassMemberRole.STUDENT,
+    )
+    updated_member = ClassMemberORM(
+        id=member.id, class_id=class_id, telegram_id=20, role=ClassMemberRole.EDITOR,
+    )
+    repository.get.return_value = member
+    repository.update.return_value = updated_member
+    service = ClassMemberService(transaction_session, repository, classes, access)
+
+    await service.update(
+        class_id,
+        member.telegram_id,
+        ClassMemberUpdate(role=ClassMemberRole.EDITOR),
+        admin,
+    )
+
+    repository.update.assert_awaited_once_with(
+        member,
+        {"role": ClassMemberRole.EDITOR},
+    )
+    assert service.pending_events[0].event_type == "class.member_role_changed"
+    assert service.pending_events[0].payload["role"] == "editor"

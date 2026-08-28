@@ -67,7 +67,9 @@ class RedisCache(Cache):
         ttl_seconds: int | None = None,
     ) -> None:
         client = await self.get_redis()
-        ttl = ttl_seconds or self._settings.default_ttl_seconds
+        ttl = self._settings.default_ttl_seconds if ttl_seconds is None else ttl_seconds
+        if ttl < 1:
+            raise ValueError("Redis TTL must be greater than zero")
         logger.debug("Writing Redis key: key=%s, ttl=%d", key, ttl)
         try:
             await client.set(key, value, ex=ttl)
@@ -89,13 +91,22 @@ class RedisCache(Cache):
 
     async def delete_pattern(self, pattern: str) -> int:
         client = await self.get_redis()
-        keys = [key async for key in client.scan_iter(match=pattern, count=100)]
-        if not keys:
-            return 0
-
-        logger.debug("Deleting %d Redis keys by pattern: pattern=%s", len(keys), pattern)
+        deleted = 0
+        batch: list[bytes | str] = []
         try:
-            return await client.delete(*keys)
+            async for key in client.scan_iter(
+                match=pattern,
+                count=self._settings.scan_batch_size,
+            ):
+                batch.append(key)
+                if len(batch) >= self._settings.scan_batch_size:
+                    deleted += await client.delete(*batch)
+                    batch.clear()
+            if batch:
+                deleted += await client.delete(*batch)
         except Exception:
             logger.exception("Redis pattern delete failed: pattern=%s", pattern)
             raise
+
+        logger.debug("Deleted %d Redis keys by pattern: pattern=%s", deleted, pattern)
+        return deleted

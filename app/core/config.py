@@ -55,6 +55,7 @@ class RedisSettings(BaseModel):
     port: int = Field(default=6379, ge=1, le=65_535)
     database: int = Field(default=0, ge=0)
     default_ttl_seconds: int = Field(default=300, ge=1)
+    scan_batch_size: int = Field(default=100, ge=1, le=10_000)
     key_prefix: str = Field(default="school-service", min_length=1)
 
     @property

@@ -6,7 +6,7 @@ import pytest
 
 from app.db.models import HomeworkORM, SubjectORM
 from app.exceptions import ClassAccessDeniedError, InvalidHomeworkDatesError, SubjectDoesNotBelongToClassError
-from app.schemas import HomeworkCreate, HomeworkUpdate
+from app.schemas import HomeworkCreate, HomeworkRead, HomeworkUpdate
 from app.services import HomeworkService
 
 
@@ -18,14 +18,46 @@ def homework(class_id, subject_id, text="old"):
     )
 
 
-def service(transaction_session, class_id, subject_id):
+def service(transaction_session, class_id, subject_id, cache=None):
     repository = AsyncMock()
     repository.update.side_effect = lambda entity, _: entity
     subjects = AsyncMock()
     subjects.get_by_id.return_value = SubjectORM(id=subject_id, class_id=class_id, name="Math", teacher_name=None)
     access = MagicMock()
     access.require_editor = AsyncMock()
-    return HomeworkService(transaction_session, repository, subjects, access), repository, subjects, access
+    access.require_member = AsyncMock()
+    return HomeworkService(transaction_session, repository, subjects, access, cache), repository, subjects, access
+
+
+@pytest.mark.asyncio
+async def test_homework_cache_hit_skips_database(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    cache = AsyncMock()
+    cached = HomeworkRead.model_construct(
+        id=uuid4(), class_id=class_id, subject_id=subject_id,
+        assigned_date=date(2026, 9, 14), due_date=date(2026, 9, 15),
+        text="cached", created_by_telegram_id=1, updated_by_telegram_id=None,
+    )
+    cache.get.return_value = cached
+    tested, repository, _, _ = service(transaction_session, class_id, subject_id, cache)
+
+    result = await tested.get(class_id, cached.id, user)
+
+    assert result is cached
+    repository.get_by_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_homework_update_invalidates_related_cache_entries(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    cache = AsyncMock()
+    tested, repository, _, _ = service(transaction_session, class_id, subject_id, cache)
+    entity = homework(class_id, subject_id)
+    repository.get_by_id.return_value = entity
+
+    await tested.update(class_id, entity.id, HomeworkUpdate(text="new"), user)
+
+    assert cache.invalidate.await_count == 3
 
 
 @pytest.mark.asyncio

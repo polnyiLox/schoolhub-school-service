@@ -7,14 +7,52 @@ import pytest
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
 from app.enums import ScheduleOverrideType
 from app.exceptions import InvalidScheduleOverrideError, InvalidScheduleTimeError, ScheduleConflictError
-from app.schemas import ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleOverrideCreate
+from app.schemas import ScheduleDayRead, ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleOverrideCreate
 from app.services import ScheduleService
 
 
-def dependencies(transaction_session, class_id, subject_id):
+def dependencies(transaction_session, class_id, subject_id, cache=None):
     repository, subjects, access = AsyncMock(), AsyncMock(), MagicMock()
+    access.require_member = AsyncMock()
     subjects.get_by_id.return_value = SubjectORM(id=subject_id, class_id=class_id, name="Math")
-    return ScheduleService(transaction_session, repository, subjects, access), repository
+    return ScheduleService(transaction_session, repository, subjects, access, cache), repository
+
+
+@pytest.mark.asyncio
+async def test_schedule_day_cache_hit_skips_database(transaction_session, user):
+    class_id = uuid4()
+    cache = AsyncMock()
+    cached = ScheduleDayRead(date=date(2026, 9, 14), lessons=[])
+    cache.get.return_value = cached
+    tested, repository = dependencies(transaction_session, class_id, uuid4(), cache)
+
+    result = await tested.get_day(class_id, cached.date, user)
+
+    assert result is cached
+    repository.list_for_weekday.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_invalidates_class_cache(transaction_session, admin):
+    class_id, subject_id = uuid4(), uuid4()
+    cache = AsyncMock()
+    tested, repository = dependencies(transaction_session, class_id, subject_id, cache)
+    repository.get_slot.return_value = None
+    repository.create_entry.return_value = ScheduleEntryORM(
+        id=uuid4(), class_id=class_id, subject_id=subject_id, weekday=0,
+        lesson_number=1, start_time=time(8), end_time=time(9),
+    )
+
+    await tested.create_entry(
+        class_id,
+        ScheduleEntryCreate(
+            subject_id=subject_id, weekday=0, lesson_number=1,
+            start_time=time(8), end_time=time(9),
+        ),
+        admin,
+    )
+
+    assert cache.invalidate_pattern.await_count == 2
 
 
 @pytest.mark.asyncio

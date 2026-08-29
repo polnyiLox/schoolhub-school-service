@@ -1,0 +1,403 @@
+name: schoolhub
+
+x-api-healthcheck: &api-healthcheck
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
+services:
+  auth-postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: schoolhub
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?set AUTH_DB_PASSWORD}
+      POSTGRES_DB: auth
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schoolhub -d auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  school-postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: schoolhub
+      POSTGRES_PASSWORD: ${SCHOOL_DB_PASSWORD:?set SCHOOL_DB_PASSWORD}
+      POSTGRES_DB: school
+    volumes:
+      - school_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schoolhub -d school"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  notification-postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: schoolhub
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?set NOTIFICATION_DB_PASSWORD}
+      POSTGRES_DB: notification
+    volumes:
+      - notification_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schoolhub -d notification"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: schoolhub
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?set MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: analytics
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok", "--username", "schoolhub", "--password", "${MONGO_PASSWORD}", "--authenticationDatabase", "admin"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.0.0
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,CONTROLLER://:29093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.0.0
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        for topic in school.events school.events.analytics.dlq school.events.notification.dlq; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 1
+        done
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  auth-migrate:
+    build:
+      context: ../auth-service
+    environment: &auth-environment
+      APP_CONFIG__DB__USER: schoolhub
+      APP_CONFIG__DB__PASSWORD: ${AUTH_DB_PASSWORD}
+      APP_CONFIG__DB__HOST: auth-postgres
+      APP_CONFIG__DB__PORT: 5432
+      APP_CONFIG__DB__NAME: auth
+      APP_CONFIG__API__V1_PREFIX: /v1
+      APP_CONFIG__API__HOST: 0.0.0.0
+      APP_CONFIG__API__PORT: 8000
+      APP_CONFIG__API__RELOAD: "false"
+      APP_CONFIG__ADMIN_TELEGRAM_IDS: '${ADMIN_TELEGRAM_IDS:-[]}'
+      APP_CONFIG__SECURITY__TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
+      APP_CONFIG__SECURITY__JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      APP_CONFIG__SECURITY__JWT_ALGORITHM: HS256
+      APP_CONFIG__SECURITY__JWT_ISSUER: schoolhub-auth
+      APP_CONFIG__SECURITY__JWT_AUDIENCE: schoolhub-api
+      APP_CONFIG__MIDDLEWARE__ALLOW_ORIGINS: '${CORS_ORIGINS:-[]}'
+      APP_CONFIG__MIDDLEWARE__ALLOW_METHODS: '["GET","POST","PATCH","DELETE"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_HEADERS: '["Authorization","Content-Type"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS: "false"
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+
+  auth-service:
+    build:
+      context: ../auth-service
+    restart: unless-stopped
+    environment: *auth-environment
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+
+  school-migrate:
+    build:
+      context: .
+    environment: &school-environment
+      APP_CONFIG__DB__USER: schoolhub
+      APP_CONFIG__DB__PASSWORD: ${SCHOOL_DB_PASSWORD}
+      APP_CONFIG__DB__HOST: school-postgres
+      APP_CONFIG__DB__PORT: 5432
+      APP_CONFIG__DB__NAME: school
+      APP_CONFIG__API__V1_PREFIX: /v1
+      APP_CONFIG__API__HOST: 0.0.0.0
+      APP_CONFIG__API__PORT: 8000
+      APP_CONFIG__API__RELOAD: "false"
+      APP_CONFIG__LOGGING__LEVEL: INFO
+      APP_CONFIG__MIDDLEWARE__ALLOW_ORIGINS: '${CORS_ORIGINS:-[]}'
+      APP_CONFIG__MIDDLEWARE__ALLOW_METHODS: '["*"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_HEADERS: '["*"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS: "false"
+      APP_CONFIG__KAFKA__BOOTSTRAP_SERVERS: kafka:29092
+      APP_CONFIG__KAFKA__TOPIC: school.events
+      APP_CONFIG__REDIS__HOST: redis
+      APP_CONFIG__REDIS__PORT: 6379
+      APP_CONFIG__REDIS__PASSWORD: ${REDIS_PASSWORD}
+      APP_CONFIG__REDIS__KEY_PREFIX: school-service
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      school-postgres:
+        condition: service_healthy
+
+  school-service:
+    build:
+      context: .
+    restart: unless-stopped
+    environment: *school-environment
+    depends_on:
+      school-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+
+  analytics-service:
+    build:
+      context: ../analytics-service
+    restart: unless-stopped
+    environment:
+      APP_CONFIG__MONGODB__USER: schoolhub
+      APP_CONFIG__MONGODB__PASSWORD: ${MONGO_PASSWORD}
+      APP_CONFIG__MONGODB__HOST: mongodb
+      APP_CONFIG__MONGODB__PORT: 27017
+      APP_CONFIG__MONGODB__NAME: analytics
+      APP_CONFIG__MONGODB__AUTH_SOURCE: admin
+      APP_CONFIG__API__V1_PREFIX: /v1
+      APP_CONFIG__API__HOST: 0.0.0.0
+      APP_CONFIG__API__PORT: 8000
+      APP_CONFIG__API__RELOAD: "false"
+      APP_CONFIG__MIDDLEWARE__ALLOW_ORIGINS: '${CORS_ORIGINS:-[]}'
+      APP_CONFIG__MIDDLEWARE__ALLOW_METHODS: '["GET"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_HEADERS: '["Content-Type"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS: "false"
+      APP_CONFIG__KAFKA__BOOTSTRAP_SERVERS: kafka:29092
+      APP_CONFIG__KAFKA__TOPIC: school.events
+      APP_CONFIG__KAFKA__DEAD_LETTER_TOPIC: school.events.analytics.dlq
+      APP_CONFIG__SCHOOL_SERVICE__BASE_URL: http://school-service:8000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      school-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+
+  notification-migrate:
+    build:
+      context: ../notification-service
+    environment: &notification-environment
+      APP_CONFIG__DB__USER: schoolhub
+      APP_CONFIG__DB__PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      APP_CONFIG__DB__HOST: notification-postgres
+      APP_CONFIG__DB__PORT: 5432
+      APP_CONFIG__DB__NAME: notification
+      APP_CONFIG__API__V1_PREFIX: /v1
+      APP_CONFIG__API__HOST: 0.0.0.0
+      APP_CONFIG__API__PORT: 8000
+      APP_CONFIG__API__RELOAD: "false"
+      APP_CONFIG__MIDDLEWARE__ALLOW_ORIGINS: '${CORS_ORIGINS:-[]}'
+      APP_CONFIG__MIDDLEWARE__ALLOW_METHODS: '["GET"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_HEADERS: '["Content-Type"]'
+      APP_CONFIG__MIDDLEWARE__ALLOW_CREDENTIALS: "false"
+      APP_CONFIG__KAFKA__BOOTSTRAP_SERVERS: kafka:29092
+      APP_CONFIG__KAFKA__TOPIC: school.events
+      APP_CONFIG__KAFKA__DEAD_LETTER_TOPIC: school.events.notification.dlq
+      APP_CONFIG__RABBITMQ__URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      APP_CONFIG__TELEGRAM__BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      APP_CONFIG__SCHOOL_SERVICE__BASE_URL: http://school-service:8000
+      APP_CONFIG__SCHOOL_SERVICE__INTERNAL_USER_ID: 00000000-0000-0000-0000-000000000000
+      APP_CONFIG__SCHOOL_SERVICE__INTERNAL_TELEGRAM_ID: 0
+      APP_CONFIG__WORKER__METRICS_HOST: 0.0.0.0
+      APP_CONFIG__WORKER__METRICS_PORT: 9000
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      notification-postgres:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ../notification-service
+    restart: unless-stopped
+    environment: *notification-environment
+    depends_on:
+      notification-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+
+  telegram-worker:
+    build:
+      context: ../notification-service
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment: *notification-environment
+    depends_on:
+      notification-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      school-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/metrics')"]
+
+  api-gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${PUBLIC_HTTP_PORT:-8080}:80"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      school-service:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/live"]
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.0
+    restart: unless-stopped
+    command: ["--nginx.scrape-uri=http://api-gateway:8080/stub_status"]
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./infrastructure/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    restart: unless-stopped
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./infrastructure/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  auth_postgres_data:
+  school_postgres_data:
+  notification_postgres_data:
+  mongodb_data:
+  redis_data:
+  kafka_data:
+  rabbitmq_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:

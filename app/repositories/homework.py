@@ -130,3 +130,23 @@ class HomeworkRepository:
         self.session.add(attachment)
         await self.session.flush()
         return attachment
+
+    async def get_attachment(self, attachment_id: UUID) -> HomeworkAttachmentORM | None:
+        query = select(HomeworkAttachmentORM).where(HomeworkAttachmentORM.id == attachment_id)
+        return await self.session.scalar(query)
+
+    async def list_attachments(
+        self, homework_id: UUID
+    ) -> builtins.list[HomeworkAttachmentORM]:
+        query = (
+            select(HomeworkAttachmentORM)
+            .where(HomeworkAttachmentORM.homework_id == homework_id)
+            .order_by(HomeworkAttachmentORM.created_at, HomeworkAttachmentORM.id)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def delete_attachment(self, attachment_id: UUID) -> None:
+        statement = delete(HomeworkAttachmentORM).where(HomeworkAttachmentORM.id == attachment_id)
+        await self.session.execute(statement)
+        await self.session.flush()

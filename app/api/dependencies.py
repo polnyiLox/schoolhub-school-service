@@ -28,6 +28,7 @@ from app.services import (
     SchoolEventService,
     SubjectService,
 )
+from app.storage import S3ObjectStorage, object_storage
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -54,6 +55,13 @@ def get_json_cache() -> JsonCache:
 
 
 JsonCacheDep = Annotated[JsonCache, Depends(get_json_cache)]
+
+
+def get_object_storage() -> S3ObjectStorage:
+    return object_storage
+
+
+ObjectStorageDep = Annotated[S3ObjectStorage, Depends(get_object_storage)]
 
 
 def get_class_repository(session: SessionDep) -> SchoolClassRepository:
@@ -144,8 +152,9 @@ def get_homework_service(
     access: AccessDep,
     cache: JsonCacheDep,
     outbox: OutboxRepoDep,
+    storage: ObjectStorageDep,
 ) -> HomeworkService:
-    return HomeworkService(session, repo, subject_repo, access, cache, outbox)
+    return HomeworkService(session, repo, subject_repo, access, cache, outbox, storage)
 
 
 def get_event_service(

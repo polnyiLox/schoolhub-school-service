@@ -1,9 +1,11 @@
 from .base import AccessDeniedError, AppError, ConflictError, NotFoundError, ValidationError
 from .domain import (
+    AttachmentTooLargeError,
     ClassAccessDeniedError,
     ClassMemberAlreadyExistsError,
     ClassMemberNotFoundError,
     ClassNotFoundError,
+    HomeworkAttachmentNotFoundError,
     HomeworkNotFoundError,
     InvalidHomeworkDatesError,
     InvalidScheduleOverrideError,
@@ -16,6 +18,7 @@ from .domain import (
     SubjectDoesNotBelongToClassError,
     SubjectInUseError,
     SubjectNotFoundError,
+    UnsupportedAttachmentTypeError,
 )
 
 __all__ = [name for name in globals() if name.endswith("Error")]

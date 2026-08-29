@@ -53,6 +53,20 @@ class HomeworkNotFoundError(NotFoundError):
     default_detail = "Homework not found"
 
 
+class HomeworkAttachmentNotFoundError(NotFoundError):
+    default_detail = "Homework attachment not found"
+
+
+class AttachmentTooLargeError(ValidationError):
+    status_code = 413
+    default_detail = "Attachment exceeds the configured size limit"
+
+
+class UnsupportedAttachmentTypeError(ValidationError):
+    status_code = 415
+    default_detail = "Attachment content type is not allowed"
+
+
 class InvalidHomeworkDatesError(ValidationError):
     default_detail = "Homework due date cannot be earlier than assigned date"
 

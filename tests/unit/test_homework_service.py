@@ -4,12 +4,15 @@ from uuid import uuid4
 
 import pytest
 
-from app.db.models import HomeworkORM, SubjectORM
+from app.core.config import settings
+from app.db.models import HomeworkAttachmentORM, HomeworkORM, SubjectORM
 from app.exceptions import (
+    AttachmentTooLargeError,
     ClassAccessDeniedError,
     HomeworkNotFoundError,
     InvalidHomeworkDatesError,
     SubjectDoesNotBelongToClassError,
+    UnsupportedAttachmentTypeError,
 )
 from app.schemas import HomeworkCreate, HomeworkRead, HomeworkUpdate
 from app.services import HomeworkService
@@ -28,7 +31,7 @@ def homework(class_id, subject_id, text="old"):
     )
 
 
-def service(transaction_session, class_id, subject_id, cache=None):
+def service(transaction_session, class_id, subject_id, cache=None, storage=None):
     repository = AsyncMock()
     repository.update.side_effect = lambda entity, _: entity
     subjects = AsyncMock()
@@ -39,7 +42,7 @@ def service(transaction_session, class_id, subject_id, cache=None):
     access.require_editor = AsyncMock()
     access.require_member = AsyncMock()
     return (
-        HomeworkService(transaction_session, repository, subjects, access, cache),
+        HomeworkService(transaction_session, repository, subjects, access, cache, None, storage),
         repository,
         subjects,
         access,
@@ -229,3 +232,86 @@ async def test_homework_event_contains_ids(transaction_session, user):
     event = tested.pending_events[0]
     assert event.aggregate_id == entity.id
     assert event.class_id == class_id
+
+
+@pytest.mark.asyncio
+async def test_upload_attachment_persists_object_metadata(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    storage = AsyncMock()
+    tested, repository, _, access = service(
+        transaction_session, class_id, subject_id, storage=storage
+    )
+    entity = homework(class_id, subject_id)
+    repository.get_by_id.return_value = entity
+    attachment = HomeworkAttachmentORM(
+        id=uuid4(),
+        homework_id=entity.id,
+        object_key="key",
+        file_name="task.pdf",
+        content_type="application/pdf",
+        size=3,
+        uploaded_by_telegram_id=user.telegram_id,
+    )
+    repository.create_attachment.return_value = attachment
+
+    result = await tested.upload_attachment(
+        class_id, entity.id, "../task.pdf", "application/pdf", b"pdf", user
+    )
+
+    assert result is attachment
+    storage.upload.assert_awaited_once()
+    assert repository.create_attachment.await_args.kwargs["file_name"] == "task.pdf"
+    access.require_editor.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upload_attachment_rejects_unsupported_type(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    storage = AsyncMock()
+    tested, repository, _, _ = service(
+        transaction_session, class_id, subject_id, storage=storage
+    )
+    entity = homework(class_id, subject_id)
+    repository.get_by_id.return_value = entity
+
+    with pytest.raises(UnsupportedAttachmentTypeError):
+        await tested.upload_attachment(
+            class_id, entity.id, "payload.exe", "application/octet-stream", b"x", user
+        )
+    storage.upload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upload_attachment_enforces_size_limit(transaction_session, user, monkeypatch):
+    class_id, subject_id = uuid4(), uuid4()
+    storage = AsyncMock()
+    tested, repository, _, _ = service(
+        transaction_session, class_id, subject_id, storage=storage
+    )
+    entity = homework(class_id, subject_id)
+    repository.get_by_id.return_value = entity
+    monkeypatch.setattr(settings.object_storage, "max_file_size_bytes", 2)
+
+    with pytest.raises(AttachmentTooLargeError):
+        await tested.upload_attachment(
+            class_id, entity.id, "task.pdf", "application/pdf", b"pdf", user
+        )
+    storage.upload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upload_attachment_compensates_failed_database_write(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    storage = AsyncMock()
+    tested, repository, _, _ = service(
+        transaction_session, class_id, subject_id, storage=storage
+    )
+    entity = homework(class_id, subject_id)
+    repository.get_by_id.return_value = entity
+    repository.create_attachment.side_effect = RuntimeError("database unavailable")
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await tested.upload_attachment(
+            class_id, entity.id, "task.pdf", "application/pdf", b"pdf", user
+        )
+    storage.delete.assert_awaited_once()

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import OutboxSettings
+from app.core.metrics import OUTBOX_PUBLISHES
 from app.db.models import OutboxEventORM
 from app.repositories import OutboxRepository
 from app.schemas import DomainEvent
@@ -66,9 +67,11 @@ class OutboxRelay:
                     event = DomainEvent.model_validate(record.payload)
                     await self._producer.publish(event, topic=record.topic)
                 except Exception as error:
+                    OUTBOX_PUBLISHES.labels("failed").inc()
                     await self._schedule_retry(repository, record, error, now)
                     continue
                 await repository.mark_published(record.id, now)
+                OUTBOX_PUBLISHES.labels("published").inc()
         return len(records)
 
     async def cleanup_published(self) -> None:

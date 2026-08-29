@@ -68,6 +68,7 @@ X-Correlation-ID: <optional string>
 - `/classes/{class_id}/schedule`
 - `/classes/{class_id}/schedule/overrides`
 - `/classes/{class_id}/homeworks` и `.../history`
+- `/classes/{class_id}/homeworks/{homework_id}/attachments` — upload/list/download/delete;
 - `/classes/{class_id}/events`
 - `/classes/{class_id}/days/{date}`
 
@@ -87,9 +88,9 @@ uv run pytest tests/e2e -q
 Unit-тесты используют mock session/repositories/services. Integration и E2E запускают
 настоящий PostgreSQL через Testcontainers, поэтому им нужен работающий Docker daemon.
 
-Текущий набор содержит 143 теста:
+Текущий набор содержит 147 тестов:
 
-- 126 unit: repository, services, API, cache, Kafka, outbox relay и readiness;
+- 130 unit: repository, services, API, attachments, cache, Kafka, outbox relay и readiness;
 - 14 integration: repository, service, transactional outbox и API с PostgreSQL;
 - 3 E2E flow: class-to-day, замена урока и история домашнего задания.
 
@@ -138,23 +139,40 @@ PostgreSQL. Если Redis недоступен при прямом запуск
 публичных операций, обращения к БД, cache hit/miss, бизнес-валидации, отказы доступа
 и неожиданные исключения. Секреты и содержимое домашних заданий в логи не выводятся.
 
+## Вложения и MinIO
+
+Файлы загружаются в приватный S3-compatible bucket, а метаданные сохраняются в PostgreSQL.
+Поддерживаются PDF, DOCX, JPEG, PNG, WebP и plain text; MIME-типы и лимит размера настраиваются
+через `APP_CONFIG__OBJECT_STORAGE__*`. Object key генерируется сервисом, имя клиента нормализуется,
+при ошибке записи metadata загруженный объект компенсирующе удаляется. Скачивание выполняется
+только после проверки membership и не требует публичного bucket.
+
 ## Observability
 
 В `infrastructure/` находятся:
 
-- Prometheus scrape configuration;
-- Grafana provisioning и базовый dashboard;
+- Prometheus scrape configuration и application `/metrics`;
+- Grafana provisioning и dashboard для HTTP, Kafka/outbox, analytics и Telegram delivery;
 - Loki с локальным filesystem storage;
 - Grafana Alloy для чтения Docker stdout/stderr и label `service`.
 
-Application-level `/metrics` и counters/histograms намеренно не реализованы. До
-добавления `/metrics` Prometheus targets приложения будут показываться как недоступные.
+## Полное развертывание SchoolHub
 
-## Намеренно оставлено для самостоятельной реализации
+Все четыре существующих репозитория должны лежать рядом в `school-hub/`. Из `school-service`:
 
-- JWT и Telegram auth internals — в Auth Service/API Gateway;
-- Kafka consumers в Analytics и Notification Service;
-- RabbitMQ publisher/consumer для Telegram-команд;
-- расширенное structured/JSON logging, если оно понадобится;
-- Prometheus middleware, `/metrics` и business metrics;
-- S3/MinIO upload flow для `HomeworkAttachmentORM`.
+```bash
+cp .env.full.example .env.full
+# заменить change_me, указать BotFather token, JWT secret, admin Telegram IDs и CORS origins
+docker compose --env-file .env.full -f docker-compose.full.yaml up -d --build
+docker compose --env-file .env.full -f docker-compose.full.yaml ps
+```
+
+Gateway доступен на `http://localhost:8080/api` (порт задаёт `PUBLIC_HTTP_PORT`). Напрямую наружу
+не публикуется ни один Python-сервис, база или broker. RabbitMQ Management, Prometheus и Grafana
+привязаны к `127.0.0.1`. Для публичного deployment TLS должен завершаться на ingress/load balancer
+платформы перед gateway; секреты следует передавать через secret manager, persistent volumes —
+включить в регулярные backup.
+
+Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает Auth, School,
+Analytics, Notification API, Telegram worker, Nginx gateway, PostgreSQL, MongoDB, Redis, Kafka,
+RabbitMQ, MinIO и observability stack.

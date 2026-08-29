@@ -14,6 +14,7 @@ from app.core.logging import configure_logging
 from app.core.metrics import MetricsMiddleware
 from app.core.metrics import router as metrics_router
 from app.db.session import engine_dispose
+from app.storage import object_storage
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ async def lifespan(_: FastAPI):
     logger.info("Starting school-service")
     try:
         await connect_cache()
+        await object_storage.connect()
         await kafka_client.connect_producer()
         await outbox_relay.start()
         logger.info("School-service started")
@@ -46,7 +48,10 @@ async def lifespan(_: FastAPI):
                 try:
                     await redis_cache.close()
                 finally:
-                    await engine_dispose()
+                    try:
+                        await object_storage.close()
+                    finally:
+                        await engine_dispose()
         logger.info("School-service stopped")
 
 

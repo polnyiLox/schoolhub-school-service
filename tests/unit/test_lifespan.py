@@ -25,6 +25,7 @@ async def test_lifespan_starts_and_stops_outbox_relay(monkeypatch):
     relay_start = AsyncMock()
     relay_stop = AsyncMock()
     cache_close = AsyncMock()
+    storage_close = AsyncMock()
     dispose = AsyncMock()
     monkeypatch.setattr("app.main.connect_cache", connect)
     monkeypatch.setattr("app.main.kafka_client.connect_producer", AsyncMock())
@@ -32,6 +33,8 @@ async def test_lifespan_starts_and_stops_outbox_relay(monkeypatch):
     monkeypatch.setattr("app.main.outbox_relay.start", relay_start)
     monkeypatch.setattr("app.main.outbox_relay.stop", relay_stop)
     monkeypatch.setattr("app.main.redis_cache.close", cache_close)
+    monkeypatch.setattr("app.main.object_storage.connect", AsyncMock())
+    monkeypatch.setattr("app.main.object_storage.close", storage_close)
     monkeypatch.setattr("app.main.engine_dispose", dispose)
 
     async with lifespan(app):
@@ -41,4 +44,5 @@ async def test_lifespan_starts_and_stops_outbox_relay(monkeypatch):
     relay_stop.assert_awaited_once()
     kafka_close.assert_awaited_once()
     cache_close.assert_awaited_once()
+    storage_close.assert_awaited_once()
     dispose.assert_awaited_once()

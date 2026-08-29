@@ -12,6 +12,7 @@ async def test_readiness_reports_required_dependencies(monkeypatch) -> None:
     monkeypatch.setattr(health.kafka_client, "_producer", object())
     monkeypatch.setattr(health.outbox_relay, "_task", MagicMock(done=lambda: False))
     monkeypatch.setattr(health.redis_cache, "_redis", object())
+    monkeypatch.setattr(health.object_storage, "_client", object())
 
     response = await health.readiness_handler()
 
@@ -23,6 +24,7 @@ async def test_readiness_reports_required_dependencies(monkeypatch) -> None:
             "kafka": "up",
             "outbox_relay": "up",
             "redis": "up",
+            "object_storage": "up",
         },
     }
 
@@ -33,6 +35,7 @@ async def test_readiness_fails_when_database_is_down(monkeypatch) -> None:
     monkeypatch.setattr(health.kafka_client, "_producer", object())
     monkeypatch.setattr(health.outbox_relay, "_task", MagicMock(done=lambda: False))
     monkeypatch.setattr(health.redis_cache, "_redis", None)
+    monkeypatch.setattr(health.object_storage, "_client", object())
 
     response = await health.readiness_handler()
 
@@ -44,6 +47,7 @@ async def test_readiness_fails_when_database_is_down(monkeypatch) -> None:
             "kafka": "up",
             "outbox_relay": "up",
             "redis": "degraded",
+            "object_storage": "up",
         },
     }
 

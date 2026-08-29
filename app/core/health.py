@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.broker import kafka_client, outbox_relay
 from app.cache import redis_cache
 from app.db.session import engine
+from app.storage import object_storage
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,12 @@ async def readiness_handler() -> JSONResponse:
         "kafka": "up" if kafka_client.is_connected else "down",
         "outbox_relay": "up" if outbox_relay.is_running else "down",
         "redis": "up" if redis_cache.is_connected else "degraded",
+        "object_storage": "up" if object_storage.is_connected else "down",
     }
-    if any(checks[name] == "down" for name in ("database", "kafka", "outbox_relay")):
+    if any(
+        checks[name] == "down"
+        for name in ("database", "kafka", "outbox_relay", "object_storage")
+    ):
         return JSONResponse(
             status_code=503,
             content={"status": "unavailable", "checks": checks},

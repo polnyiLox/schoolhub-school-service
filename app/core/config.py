@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +73,25 @@ class LoggingSettings(BaseModel):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
+class ObjectStorageSettings(BaseModel):
+    endpoint_url: str = Field(default="http://minio:9000", min_length=1)
+    access_key: str = Field(default="minioadmin", min_length=1)
+    secret_key: SecretStr = Field(default=SecretStr("minioadmin"))
+    bucket: str = Field(default="schoolhub-homework", min_length=3)
+    region: str = Field(default="us-east-1", min_length=1)
+    max_file_size_bytes: int = Field(default=10_485_760, ge=1)
+    allowed_content_types: list[str] = Field(
+        default_factory=lambda: [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "text/plain",
+        ]
+    )
+
+
 class OutboxSettings(BaseModel):
     poll_interval_seconds: float = Field(default=1.0, gt=0)
     batch_size: int = Field(default=100, ge=1, le=1_000)
@@ -99,6 +118,7 @@ class Settings(BaseSettings):
     kafka: KafkaSettings = Field(default_factory=KafkaSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    object_storage: ObjectStorageSettings = Field(default_factory=ObjectStorageSettings)
     outbox: OutboxSettings = Field(default_factory=OutboxSettings)
 
     model_config = SettingsConfigDict(

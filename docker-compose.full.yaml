@@ -340,12 +340,26 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/metrics')"]
 
   api-gateway:
-    image: nginx:1.27-alpine
+    build:
+      context: ../api-gateway
     restart: unless-stopped
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    environment:
+      APP_CONFIG__SERVICES__AUTH_URL: http://auth-service:8000
+      APP_CONFIG__SERVICES__SCHOOL_URL: http://school-service:8000
+      APP_CONFIG__SERVICES__ANALYTICS_URL: http://analytics-service:8000
+      APP_CONFIG__SERVICES__NOTIFICATION_URL: http://notification-service:8000
+      APP_CONFIG__REDIS__HOST: redis
+      APP_CONFIG__REDIS__PORT: 6379
+      APP_CONFIG__REDIS__PASSWORD: ${REDIS_PASSWORD}
+      APP_CONFIG__REDIS__DATABASE: 1
+      APP_CONFIG__RATE_LIMIT__WINDOW_SECONDS: ${GATEWAY_RATE_LIMIT_WINDOW_SECONDS:-60}
+      APP_CONFIG__RATE_LIMIT__PUBLIC_REQUESTS: ${GATEWAY_PUBLIC_REQUESTS:-30}
+      APP_CONFIG__RATE_LIMIT__AUTHENTICATED_REQUESTS: ${GATEWAY_AUTHENTICATED_REQUESTS:-300}
+      APP_CONFIG__PROXY__MAX_REQUEST_BYTES: ${GATEWAY_MAX_REQUEST_BYTES:-12582912}
+      APP_CONFIG__CORS__ALLOW_ORIGINS: '${CORS_ORIGINS:-[]}'
+      APP_CONFIG__CORS__ALLOW_CREDENTIALS: "false"
     ports:
-      - "${PUBLIC_HTTP_PORT:-8080}:80"
+      - "${PUBLIC_HTTP_PORT:-8080}:8000"
     depends_on:
       auth-service:
         condition: service_healthy
@@ -355,17 +369,11 @@ services:
         condition: service_healthy
       notification-service:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       <<: *api-healthcheck
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/live"]
-
-  nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.4.0
-    restart: unless-stopped
-    command: ["--nginx.scrape-uri=http://api-gateway:8080/stub_status"]
-    depends_on:
-      api-gateway:
-        condition: service_healthy
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
 
   prometheus:
     image: prom/prometheus:v3.1.0

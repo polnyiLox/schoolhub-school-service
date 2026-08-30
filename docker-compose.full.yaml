@@ -375,6 +375,22 @@ services:
       <<: *api-healthcheck
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
 
+  mini-app:
+    build:
+      context: ../mini-app
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${MINI_APP_API_BASE_URL:-http://localhost:8080/api}
+        NEXT_PUBLIC_DEMO_MODE: "false"
+    restart: unless-stopped
+    ports:
+      - "${MINI_APP_PORT:-3001}:3000"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => { if (!r.ok) process.exit(1) })"]
+
   prometheus:
     image: prom/prometheus:v3.1.0
     restart: unless-stopped

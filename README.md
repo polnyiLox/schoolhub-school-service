@@ -158,7 +158,8 @@ PostgreSQL. Если Redis недоступен при прямом запуск
 
 ## Полное развертывание SchoolHub
 
-Все четыре существующих репозитория должны лежать рядом в `school-hub/`. Из `school-service`:
+Все пять репозиториев (`api-gateway`, `auth-service`, `school-service`, `analytics-service`,
+`notification-service`) должны лежать рядом в `school-hub/`. Из `school-service`:
 
 ```bash
 cp .env.full.example .env.full
@@ -173,6 +174,8 @@ Gateway доступен на `http://localhost:8080/api` (порт задаёт
 платформы перед gateway; секреты следует передавать через secret manager, persistent volumes —
 включить в регулярные backup.
 
-Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает Auth, School,
-Analytics, Notification API, Telegram worker, Nginx gateway, PostgreSQL, MongoDB, Redis, Kafka,
-RabbitMQ, MinIO и observability stack.
+Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает FastAPI API
+Gateway, Auth, School, Analytics, Notification API, Telegram worker, PostgreSQL, MongoDB, Redis,
+Kafka, RabbitMQ, MinIO и observability stack. Gateway проверяет Bearer token через Auth Service,
+заменяет недоверенные identity headers, ограничивает запросы через Redis и публикует собственные
+Prometheus metrics.

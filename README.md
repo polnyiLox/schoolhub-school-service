@@ -158,8 +158,9 @@ PostgreSQL. Если Redis недоступен при прямом запуск
 
 ## Полное развертывание SchoolHub
 
-Все пять репозиториев (`api-gateway`, `auth-service`, `school-service`, `analytics-service`,
-`notification-service`) должны лежать рядом в `school-hub/`. Из `school-service`:
+Все шесть репозиториев (`mini-app`, `api-gateway`, `auth-service`, `school-service`,
+`analytics-service`, `notification-service`) должны лежать рядом в `school-hub/`. Из
+`school-service`:
 
 ```bash
 cp .env.full.example .env.full
@@ -174,8 +175,12 @@ Gateway доступен на `http://localhost:8080/api` (порт задаёт
 платформы перед gateway; секреты следует передавать через secret manager, persistent volumes —
 включить в регулярные backup.
 
-Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает FastAPI API
-Gateway, Auth, School, Analytics, Notification API, Telegram worker, PostgreSQL, MongoDB, Redis,
+Mini App локально доступна на `http://localhost:3001`. Для запуска внутри Telegram укажи публичные
+HTTPS-адреса frontend и gateway в `MINI_APP_API_BASE_URL` и `CORS_ORIGINS`, а frontend URL настрой
+в BotFather как Main Mini App. Demo mode в Docker deployment всегда выключен.
+
+Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает Telegram Mini
+App, FastAPI API Gateway, Auth, School, Analytics, Notification API, Telegram worker, PostgreSQL, MongoDB, Redis,
 Kafka, RabbitMQ, MinIO и observability stack. Gateway проверяет Bearer token через Auth Service,
 заменяет недоверенные identity headers, ограничивает запросы через Redis и публикует собственные
 Prometheus metrics.

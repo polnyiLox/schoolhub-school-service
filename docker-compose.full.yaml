@@ -296,6 +296,7 @@ services:
       APP_CONFIG__KAFKA__DEAD_LETTER_TOPIC: school.events.notification.dlq
       APP_CONFIG__RABBITMQ__URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
       APP_CONFIG__TELEGRAM__BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      APP_CONFIG__TELEGRAM__MINI_APP_URL: ${MINI_APP_PUBLIC_URL:-https://example.com}
       APP_CONFIG__SCHOOL_SERVICE__BASE_URL: http://school-service:8000
       APP_CONFIG__SCHOOL_SERVICE__INTERNAL_USER_ID: 00000000-0000-0000-0000-000000000000
       APP_CONFIG__SCHOOL_SERVICE__INTERNAL_TELEGRAM_ID: 0
@@ -390,6 +391,22 @@ services:
     healthcheck:
       <<: *api-healthcheck
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => { if (!r.ok) process.exit(1) })"]
+
+  public-edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:${PUBLIC_EDGE_PORT:-3002}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+      mini-app:
+        condition: service_healthy
+    healthcheck:
+      <<: *api-healthcheck
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
 
   prometheus:
     image: prom/prometheus:v3.1.0

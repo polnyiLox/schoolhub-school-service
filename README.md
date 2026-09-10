@@ -3,6 +3,13 @@
 Асинхронный FastAPI-микросервис для классов, участников, предметов, расписания,
 домашних заданий и школьных событий.
 
+Этот репозиторий также содержит полный Docker Compose-контур SchoolHub. Остальные компоненты:
+[API Gateway](https://github.com/polnyiLox/schoolhub-api-gateway),
+[Auth Service](https://github.com/polnyiLox/schoolhub-auth-service),
+[Analytics Service](https://github.com/polnyiLox/schoolhub-analytics-service),
+[Notification Service](https://github.com/polnyiLox/schoolhub-notification-service) и
+[Telegram Mini App](https://github.com/polnyiLox/schoolhub-mini-app).
+
 ## Архитектура
 
 ```text
@@ -20,7 +27,10 @@ Outbox relay -> Kafka
 
 ## Запуск
 
-Скопируй `.env.example` в `.env`, затем выполни:
+Полностью рабочий локальный запуск рекомендуется выполнять через раздел
+[«Полное развертывание SchoolHub»](#полное-развертывание-schoolhub) ниже. Для изолированной
+разработки скопируй `.env.example` в `.env` и укажи доступное S3-совместимое хранилище: dev Compose
+поднимает PostgreSQL, Redis, Kafka и observability, но не создаёт MinIO. Затем выполни:
 
 ```bash
 docker compose -f docker-compose.dev.yaml up --build
@@ -39,7 +49,7 @@ docker compose -f docker-compose.dev.yaml up --build
 
 Проверки состояния:
 
-- `/health` и `/health/live` — liveness без внешних зависимостей;
+- `/health/live` — liveness без внешних зависимостей;
 - `/health/ready` — PostgreSQL, Kafka и outbox relay; недоступный Redis отмечается
   как деградация, но не выключает сервис.
 
@@ -80,19 +90,16 @@ X-Correlation-ID: <optional string>
 uv run ruff check app tests
 uv run ruff format --check app tests
 uv run mypy app
-uv run pytest tests/unit -q
-uv run pytest tests/integration -q
-uv run pytest tests/e2e -q
+uv run python -m pytest tests/unit -q
+uv run python -m pytest tests/integration -q
+uv run python -m pytest tests/e2e -q
 ```
 
 Unit-тесты используют mock session/repositories/services. Integration и E2E запускают
 настоящий PostgreSQL через Testcontainers, поэтому им нужен работающий Docker daemon.
 
-Текущий набор содержит 147 тестов:
-
-- 130 unit: repository, services, API, attachments, cache, Kafka, outbox relay и readiness;
-- 14 integration: repository, service, transactional outbox и API с PostgreSQL;
-- 3 E2E flow: class-to-day, замена урока и история домашнего задания.
+Набор включает unit-, integration- и E2E-проверки repository, services, API, attachments, cache,
+Kafka, transactional outbox и основных пользовательских сценариев.
 
 ## Kafka
 
@@ -164,7 +171,7 @@ PostgreSQL. Если Redis недоступен при прямом запуск
 
 ```bash
 cp .env.full.example .env.full
-# заменить change_me, указать BotFather token, JWT secret, admin Telegram IDs и CORS origins
+# заменить change_me, указать BotFather token, JWT secret и admin Telegram IDs
 docker compose --env-file .env.full -f docker-compose.full.yaml up -d --build
 docker compose --env-file .env.full -f docker-compose.full.yaml ps
 ```
@@ -179,7 +186,8 @@ Mini App локально доступна на `http://localhost:3001`, а ед
 `http://localhost:3002`: `/` проксируется в frontend, `/api` — в API Gateway. Frontend использует
 относительный `MINI_APP_API_BASE_URL=/api`, поэтому браузер работает с API на том же origin.
 
-Для теста внутри Telegram открой временный HTTPS tunnel до edge-порта, например:
+Для теста внутри Telegram открой временный HTTPS tunnel до edge-порта, например (сторонний сервис
+может ограничивать длительность бесплатной сессии):
 
 ```powershell
 ssh -T -o ServerAliveInterval=30 -R 80:127.0.0.1:3002 serveo.net

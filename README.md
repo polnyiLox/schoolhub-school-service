@@ -175,9 +175,26 @@ Gateway доступен на `http://localhost:8080/api` (порт задаёт
 платформы перед gateway; секреты следует передавать через secret manager, persistent volumes —
 включить в регулярные backup.
 
-Mini App локально доступна на `http://localhost:3001`. Для запуска внутри Telegram укажи публичные
-HTTPS-адреса frontend и gateway в `MINI_APP_API_BASE_URL` и `CORS_ORIGINS`, а frontend URL настрой
-в BotFather как Main Mini App. Demo mode в Docker deployment всегда выключен.
+Mini App локально доступна на `http://localhost:3001`, а единый edge-вход для Telegram — на
+`http://localhost:3002`: `/` проксируется в frontend, `/api` — в API Gateway. Frontend использует
+относительный `MINI_APP_API_BASE_URL=/api`, поэтому браузер работает с API на том же origin.
+
+Для теста внутри Telegram открой временный HTTPS tunnel до edge-порта, например:
+
+```powershell
+ssh -T -o ServerAliveInterval=30 -R 80:127.0.0.1:3002 serveo.net
+```
+
+Полученный HTTPS URL запиши в `MINI_APP_PUBLIC_URL` файла `.env.full`, затем пересоздай worker:
+
+```powershell
+docker compose --env-file .env.full -f docker-compose.full.yaml build telegram-worker
+docker compose --env-file .env.full -f docker-compose.full.yaml up -d --no-deps --force-recreate telegram-worker
+```
+
+Telegram worker удаляет webhook, регистрирует `/start`, кнопку меню и inline WebApp-кнопку с этим
+URL. Временный tunnel действует только пока работает SSH-процесс. Для сервера используй постоянный
+домен или named tunnel и TLS; demo mode в Docker deployment всегда выключен.
 
 Compose применяет Alembic migrations, создаёт Kafka topics и S3 bucket и запускает Telegram Mini
 App, FastAPI API Gateway, Auth, School, Analytics, Notification API, Telegram worker, PostgreSQL, MongoDB, Redis,

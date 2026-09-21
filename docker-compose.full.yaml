@@ -380,17 +380,17 @@ services:
     build:
       context: ../mini-app
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${MINI_APP_API_BASE_URL:-http://localhost:8080/api}
-        NEXT_PUBLIC_DEMO_MODE: "false"
+        VITE_API_BASE_URL: ${MINI_APP_API_BASE_URL:-http://localhost:8080/api}
+        VITE_DEMO_MODE: "false"
     restart: unless-stopped
     ports:
-      - "${MINI_APP_PORT:-3001}:3000"
+      - "${MINI_APP_PORT:-3001}:80"
     depends_on:
       api-gateway:
         condition: service_healthy
     healthcheck:
       <<: *api-healthcheck
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r => { if (!r.ok) process.exit(1) })"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/favicon.svg"]
 
   public-edge:
     image: nginx:1.27-alpine
@@ -406,7 +406,7 @@ services:
         condition: service_healthy
     healthcheck:
       <<: *api-healthcheck
-      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/favicon.svg"]
 
   prometheus:
     image: prom/prometheus:v3.1.0

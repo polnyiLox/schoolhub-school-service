@@ -53,7 +53,7 @@ services:
       retries: 10
 
   mongodb:
-    image: mongo:8.0
+    image: mongo:7.0
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: schoolhub

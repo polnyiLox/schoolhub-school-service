@@ -182,6 +182,17 @@ Gateway доступен на `http://localhost:8080/api` (порт задаёт
 платформы перед gateway; секреты следует передавать через secret manager, persistent volumes —
 включить в регулярные backup.
 
+На сервере `201.51.19.240` TLS завершает Caddy по адресу
+`https://201-51-19-240.sslip.io`; его конфигурация находится в
+`infrastructure/caddy/Caddyfile` и проксирует только loopback-порт public edge (`3002`).
+В серверном `.env.full` установлены `MINI_APP_PUBLIC_URL` с этим HTTPS-адресом,
+`MINI_APP_API_BASE_URL=/api`, соответствующий `CORS_ORIGINS`, а `PUBLIC_HTTP_PORT` и
+`MINI_APP_PORT` привязаны к `127.0.0.1`. Публикуй этот файл только на сервере с правами
+`0600`, не добавляй его в Git. После замены домена обнови Caddyfile, `.env.full` и
+пересоздай `telegram-worker`: при старте он обновляет кнопку Mini App в Telegram.
+На VPS с 2 ГБ RAM запускай целевые сервисы `public-edge telegram-worker` с их
+зависимостями; Prometheus, Loki, Alloy и Grafana требуют дополнительной памяти.
+
 Mini App локально доступна на `http://localhost:3001`, а единый edge-вход для Telegram — на
 `http://localhost:3002`: `/` проксируется в frontend, `/api` — в API Gateway. Frontend использует
 относительный `MINI_APP_API_BASE_URL=/api`, поэтому браузер работает с API на том же origin.

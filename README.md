@@ -76,13 +76,17 @@ X-Correlation-ID: <optional string>
 - `/classes/{class_id}/members`
 - `/classes/{class_id}/subjects`
 - `/classes/{class_id}/schedule`
+- `/classes/{class_id}/schedule/entries` — список постоянных уроков с ID для редактирования;
 - `/classes/{class_id}/schedule/overrides`
+- `/classes/{class_id}/schedule/overrides/by-date/{date}` — разовые изменения на дату;
 - `/classes/{class_id}/homeworks` и `.../history`
 - `/classes/{class_id}/homeworks/{homework_id}/attachments` — upload/list/download/delete;
 - `/classes/{class_id}/events`
 - `/classes/{class_id}/days/{date}`
 
 Точный контракт доступен в OpenAPI/Swagger.
+Просматривать расписание могут участники класса, а изменять постоянные уроки и разовые
+изменения — администратор и редакторы именно этого класса.
 
 ## Тесты
 

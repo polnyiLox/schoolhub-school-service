@@ -12,6 +12,7 @@ from app.api.dependencies import (
     get_event_service,
     get_homework_service,
     get_member_service,
+    get_schedule_service,
 )
 from app.db.models import HomeworkORM, SchoolClassORM
 from app.enums import GlobalRole
@@ -66,6 +67,34 @@ async def test_create_class_returns_201_and_calls_service(client):
     assert response.status_code == 201
     assert response.json()["id"] == str(entity.id)
     service.create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_schedule_entries_route_does_not_parse_entries_as_date(client):
+    service = service_mock()
+    service.list_entries.return_value = []
+    app.dependency_overrides[get_schedule_service] = lambda: service
+    class_id = uuid4()
+
+    response = await client.get(f"/v1/classes/{class_id}/schedule/entries")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    service.list_entries.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_schedule_overrides_can_be_listed_by_date(client):
+    service = service_mock()
+    service.list_overrides.return_value = []
+    app.dependency_overrides[get_schedule_service] = lambda: service
+    class_id = uuid4()
+
+    response = await client.get(f"/v1/classes/{class_id}/schedule/overrides/by-date/2026-09-21")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    service.list_overrides.assert_awaited_once()
 
 
 @pytest.mark.asyncio

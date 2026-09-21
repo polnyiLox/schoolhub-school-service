@@ -96,6 +96,29 @@ class ScheduleService(EventCollectingService):
         self.access = access
         self.cache = cache
 
+    async def list_entries(
+        self, class_id: UUID, actor: CurrentUser
+    ) -> list[ScheduleEntryORM]:
+        logger.info("Listing schedule entries: class_id=%s", class_id)
+        await self.access.require_member(class_id, actor)
+        entries = await self.repository.list_week(class_id)
+        logger.info("Schedule entries listed: class_id=%s, count=%d", class_id, len(entries))
+        return entries
+
+    async def list_overrides(
+        self, class_id: UUID, target_date: date, actor: CurrentUser
+    ) -> list[ScheduleOverrideORM]:
+        logger.info("Listing schedule overrides: class_id=%s, date=%s", class_id, target_date)
+        await self.access.require_member(class_id, actor)
+        overrides = await self.repository.list_overrides(class_id, target_date)
+        logger.info(
+            "Schedule overrides listed: class_id=%s, date=%s, count=%d",
+            class_id,
+            target_date,
+            len(overrides),
+        )
+        return overrides
+
     async def get_day(
         self, class_id: UUID, target_date: date, actor: CurrentUser
     ) -> ScheduleDayRead:
@@ -184,10 +207,9 @@ class ScheduleService(EventCollectingService):
             data.weekday,
             data.lesson_number,
         )
-        self.access.require_admin(actor)
         try:
             async with self.session.begin():
-                await self.access.require_member(class_id, actor)
+                await self.access.require_editor(class_id, actor)
                 await self._require_subject(class_id, data.subject_id)
                 if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
                     logger.warning(
@@ -229,9 +251,9 @@ class ScheduleService(EventCollectingService):
         correlation_id: str | None = None,
     ) -> ScheduleEntryORM:
         logger.info("Updating schedule entry: class_id=%s, entry_id=%s", class_id, entry_id)
-        self.access.require_admin(actor)
         try:
             async with self.session.begin():
+                await self.access.require_editor(class_id, actor)
                 entity = await self._get_entry(class_id, entry_id)
                 changes = data.model_dump(exclude_unset=True)
                 subject_id = changes.get("subject_id", entity.subject_id)
@@ -272,8 +294,8 @@ class ScheduleService(EventCollectingService):
         correlation_id: str | None = None,
     ) -> None:
         logger.info("Deleting schedule entry: class_id=%s, entry_id=%s", class_id, entry_id)
-        self.access.require_admin(actor)
         async with self.session.begin():
+            await self.access.require_editor(class_id, actor)
             entity = await self._get_entry(class_id, entry_id)
             await self.repository.delete_entry(entity)
             self._add_event(
@@ -295,10 +317,9 @@ class ScheduleService(EventCollectingService):
             data.date,
             data.lesson_number,
         )
-        self.access.require_admin(actor)
         try:
             async with self.session.begin():
-                await self.access.require_member(class_id, actor)
+                await self.access.require_editor(class_id, actor)
                 await self._validate_override(
                     class_id, data.override_type, data.subject_id, data.start_time, data.end_time
                 )
@@ -352,9 +373,9 @@ class ScheduleService(EventCollectingService):
         logger.info(
             "Updating schedule override: class_id=%s, override_id=%s", class_id, override_id
         )
-        self.access.require_admin(actor)
         try:
             async with self.session.begin():
+                await self.access.require_editor(class_id, actor)
                 entity = await self._get_override(class_id, override_id)
                 changes = data.model_dump(exclude_unset=True)
                 effective_type = changes.get("override_type", entity.override_type)
@@ -406,8 +427,8 @@ class ScheduleService(EventCollectingService):
         logger.info(
             "Deleting schedule override: class_id=%s, override_id=%s", class_id, override_id
         )
-        self.access.require_admin(actor)
         async with self.session.begin():
+            await self.access.require_editor(class_id, actor)
             entity = await self._get_override(class_id, override_id)
             await self.repository.delete_override(entity)
             self._add_event(

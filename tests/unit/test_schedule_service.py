@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import ScheduleEntryORM, ScheduleOverrideORM, SubjectORM
 from app.enums import ScheduleOverrideType
 from app.exceptions import (
+    ClassAccessDeniedError,
     ClassNotFoundError,
     InvalidScheduleOverrideError,
     InvalidScheduleTimeError,
@@ -35,8 +36,131 @@ def integrity_error(constraint_name: str) -> IntegrityError:
 def dependencies(transaction_session, class_id, subject_id, cache=None):
     repository, subjects, access = AsyncMock(), AsyncMock(), MagicMock()
     access.require_member = AsyncMock()
+    access.require_editor = AsyncMock()
     subjects.get_by_id.return_value = SubjectORM(id=subject_id, class_id=class_id, name="Math")
     return ScheduleService(transaction_session, repository, subjects, access, cache), repository
+
+
+@pytest.mark.asyncio
+async def test_schedule_entries_are_listed_for_class_members(transaction_session, user):
+    class_id = uuid4()
+    service, repository = dependencies(transaction_session, class_id, uuid4())
+    repository.list_week.return_value = []
+
+    assert await service.list_entries(class_id, user) == []
+    service.access.require_member.assert_awaited_once_with(class_id, user)
+    repository.list_week.assert_awaited_once_with(class_id)
+
+
+@pytest.mark.asyncio
+async def test_schedule_overrides_are_listed_for_class_members(transaction_session, user):
+    class_id = uuid4()
+    target_date = date(2026, 9, 14)
+    service, repository = dependencies(transaction_session, class_id, uuid4())
+    repository.list_overrides.return_value = []
+
+    assert await service.list_overrides(class_id, target_date, user) == []
+    service.access.require_member.assert_awaited_once_with(class_id, user)
+    repository.list_overrides.assert_awaited_once_with(class_id, target_date)
+
+
+@pytest.mark.asyncio
+async def test_editor_can_create_schedule_entry(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    service, repository = dependencies(transaction_session, class_id, subject_id)
+    repository.get_slot.return_value = None
+    repository.create_entry.return_value = ScheduleEntryORM(
+        id=uuid4(),
+        class_id=class_id,
+        subject_id=subject_id,
+        weekday=0,
+        lesson_number=1,
+        start_time=time(8),
+        end_time=time(9),
+    )
+
+    await service.create_entry(
+        class_id,
+        ScheduleEntryCreate(
+            subject_id=subject_id,
+            weekday=0,
+            lesson_number=1,
+            start_time=time(8),
+            end_time=time(9),
+        ),
+        user,
+    )
+
+    service.access.require_editor.assert_awaited_once_with(class_id, user)
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_create_schedule_entry(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    service, repository = dependencies(transaction_session, class_id, subject_id)
+    service.access.require_editor.side_effect = ClassAccessDeniedError()
+
+    with pytest.raises(ClassAccessDeniedError):
+        await service.create_entry(
+            class_id,
+            ScheduleEntryCreate(
+                subject_id=subject_id,
+                weekday=0,
+                lesson_number=1,
+                start_time=time(8),
+                end_time=time(9),
+            ),
+            user,
+        )
+
+    repository.create_entry.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_editor_can_create_one_day_cancellation(transaction_session, user):
+    class_id = uuid4()
+    service, repository = dependencies(transaction_session, class_id, uuid4())
+    repository.get_override_slot.return_value = None
+    repository.create_override.return_value = ScheduleOverrideORM(
+        id=uuid4(),
+        class_id=class_id,
+        date=date(2026, 9, 14),
+        lesson_number=1,
+        override_type=ScheduleOverrideType.CANCELLED,
+        created_by_telegram_id=user.telegram_id,
+    )
+
+    await service.create_override(
+        class_id,
+        ScheduleOverrideCreate(
+            date=date(2026, 9, 14),
+            lesson_number=1,
+            override_type=ScheduleOverrideType.CANCELLED,
+        ),
+        user,
+    )
+
+    service.access.require_editor.assert_awaited_once_with(class_id, user)
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_create_one_day_override(transaction_session, user):
+    class_id = uuid4()
+    service, repository = dependencies(transaction_session, class_id, uuid4())
+    service.access.require_editor.side_effect = ClassAccessDeniedError()
+
+    with pytest.raises(ClassAccessDeniedError):
+        await service.create_override(
+            class_id,
+            ScheduleOverrideCreate(
+                date=date(2026, 9, 14),
+                lesson_number=1,
+                override_type=ScheduleOverrideType.CANCELLED,
+            ),
+            user,
+        )
+
+    repository.create_override.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -224,7 +348,7 @@ async def test_cancelled_override_does_not_require_subject(transaction_session, 
 @pytest.mark.asyncio
 async def test_cancelled_override_requires_existing_class(transaction_session, admin):
     tested, repository = dependencies(transaction_session, uuid4(), uuid4())
-    tested.access.require_member.side_effect = ClassNotFoundError()
+    tested.access.require_editor.side_effect = ClassNotFoundError()
 
     with pytest.raises(ClassNotFoundError):
         await tested.create_override(

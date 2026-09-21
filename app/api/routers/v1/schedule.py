@@ -41,6 +41,25 @@ async def get_week_schedule(
     return await service.get_week(class_id, date_type.today(), actor)
 
 
+@router.get("/entries", response_model=list[ScheduleEntryRead])
+async def list_schedule_entries(
+    class_id: UUID,
+    actor: CurrentUserDep,
+    service: ScheduleServiceDep,
+):
+    return await service.list_entries(class_id, actor)
+
+
+@router.get("/overrides/by-date/{date}", response_model=list[ScheduleOverrideRead])
+async def list_schedule_overrides(
+    class_id: UUID,
+    target_date: Annotated[date_type, Path(alias="date")],
+    actor: CurrentUserDep,
+    service: ScheduleServiceDep,
+):
+    return await service.list_overrides(class_id, target_date, actor)
+
+
 @router.get("/{date}", response_model=ScheduleDayRead)
 async def get_date_schedule(
     class_id: UUID,

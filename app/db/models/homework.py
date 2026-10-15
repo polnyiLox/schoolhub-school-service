@@ -4,7 +4,16 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models.base import Base, TimestampMixin
@@ -71,3 +80,22 @@ class HomeworkAttachmentORM(Base):
     )
 
     homework: Mapped[HomeworkORM] = relationship(back_populates="attachments")
+
+
+class HomeworkCompletionORM(Base):
+    __tablename__ = "homework_completions"
+    __table_args__ = (
+        UniqueConstraint(
+            "homework_id",
+            "telegram_id",
+            name="uq_homework_completion_user",
+        ),
+    )
+
+    homework_id: Mapped[UUID] = mapped_column(
+        ForeignKey("homeworks.id", ondelete="CASCADE"), index=True
+    )
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )

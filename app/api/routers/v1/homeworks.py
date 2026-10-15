@@ -12,6 +12,7 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.schemas import (
     HomeworkAttachmentRead,
+    HomeworkCompletionRead,
     HomeworkCreate,
     HomeworkRead,
     HomeworkRevisionRead,
@@ -28,6 +29,36 @@ async def list_homeworks(
     service: HomeworkServiceDep,
 ):
     return await service.list(class_id, actor)
+
+
+@router.get("/completions", response_model=list[HomeworkCompletionRead])
+async def list_homework_completions(
+    class_id: UUID,
+    actor: CurrentUserDep,
+    service: HomeworkServiceDep,
+):
+    return await service.list_completions(class_id, actor)
+
+
+@router.put("/{homework_id}/completion", response_model=HomeworkCompletionRead)
+async def mark_homework_completed(
+    class_id: UUID,
+    homework_id: UUID,
+    actor: CurrentUserDep,
+    service: HomeworkServiceDep,
+):
+    return await service.mark_completed(class_id, homework_id, actor)
+
+
+@router.delete("/{homework_id}/completion", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_homework_incomplete(
+    class_id: UUID,
+    homework_id: UUID,
+    actor: CurrentUserDep,
+    service: HomeworkServiceDep,
+) -> Response:
+    await service.unmark_completed(class_id, homework_id, actor)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{homework_id}", response_model=HomeworkRead)

@@ -170,6 +170,33 @@ async def test_homework_response_uses_read_schema(client):
 
 
 @pytest.mark.asyncio
+async def test_homework_completion_routes_use_current_user_service(client):
+    service = service_mock()
+    now = datetime.now(UTC)
+    homework_id = uuid4()
+    completion = MagicMock(
+        id=uuid4(),
+        homework_id=homework_id,
+        completed_at=now,
+    )
+    service.list_completions.return_value = [completion]
+    service.mark_completed.return_value = completion
+    app.dependency_overrides[get_homework_service] = lambda: service
+    class_id = uuid4()
+
+    listed = await client.get(f"/v1/classes/{class_id}/homeworks/completions")
+    marked = await client.put(f"/v1/classes/{class_id}/homeworks/{homework_id}/completion")
+    unmarked = await client.delete(f"/v1/classes/{class_id}/homeworks/{homework_id}/completion")
+
+    assert listed.status_code == 200
+    assert listed.json()[0]["homework_id"] == str(homework_id)
+    assert marked.status_code == 200
+    assert unmarked.status_code == 204
+    service.mark_completed.assert_awaited_once()
+    service.unmark_completed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_domain_validation_error_maps_to_422(client):
     service = service_mock()
     service.create.side_effect = InvalidSchoolEventDatesError()

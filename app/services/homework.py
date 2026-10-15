@@ -24,6 +24,7 @@ from app.repositories import HomeworkRepository, OutboxRepository, SubjectReposi
 from app.schemas import (
     CurrentUser,
     HomeworkAttachmentRead,
+    HomeworkCompletionRead,
     HomeworkCreate,
     HomeworkRead,
     HomeworkRevisionRead,
@@ -153,6 +154,41 @@ class HomeworkService(EventCollectingService):
             "Homework history retrieved: homework_id=%s, revisions=%d", homework_id, len(result)
         )
         return result
+
+    async def list_completions(
+        self,
+        class_id: UUID,
+        actor: CurrentUser,
+    ) -> builtins.list[HomeworkCompletionRead]:
+        logger.info("Listing homework completions: class_id=%s", class_id)
+        await self.access.require_member(class_id, actor)
+        entities = await self.repository.list_completions(class_id, actor.telegram_id)
+        return [HomeworkCompletionRead.model_validate(entity) for entity in entities]
+
+    async def mark_completed(
+        self,
+        class_id: UUID,
+        homework_id: UUID,
+        actor: CurrentUser,
+    ) -> HomeworkCompletionRead:
+        logger.info("Marking homework completed: homework_id=%s", homework_id)
+        async with self.session.begin():
+            await self.access.require_member(class_id, actor)
+            await self._get_for_class(class_id, homework_id)
+            completion = await self.repository.mark_completed(homework_id, actor.telegram_id)
+        return HomeworkCompletionRead.model_validate(completion)
+
+    async def unmark_completed(
+        self,
+        class_id: UUID,
+        homework_id: UUID,
+        actor: CurrentUser,
+    ) -> None:
+        logger.info("Marking homework incomplete: homework_id=%s", homework_id)
+        async with self.session.begin():
+            await self.access.require_member(class_id, actor)
+            await self._get_for_class(class_id, homework_id)
+            await self.repository.unmark_completed(homework_id, actor.telegram_id)
 
     async def create(
         self,

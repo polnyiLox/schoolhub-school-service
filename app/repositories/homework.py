@@ -6,9 +6,15 @@ from datetime import date
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import HomeworkAttachmentORM, HomeworkORM, HomeworkRevisionORM
+from app.db.models import (
+    HomeworkAttachmentORM,
+    HomeworkCompletionORM,
+    HomeworkORM,
+    HomeworkRevisionORM,
+)
 
 
 class HomeworkRepository:
@@ -150,3 +156,46 @@ class HomeworkRepository:
         statement = delete(HomeworkAttachmentORM).where(HomeworkAttachmentORM.id == attachment_id)
         await self.session.execute(statement)
         await self.session.flush()
+
+    async def list_completions(
+        self,
+        class_id: UUID,
+        telegram_id: int,
+    ) -> builtins.list[HomeworkCompletionORM]:
+        query = (
+            select(HomeworkCompletionORM)
+            .join(HomeworkORM, HomeworkORM.id == HomeworkCompletionORM.homework_id)
+            .where(
+                HomeworkORM.class_id == class_id,
+                HomeworkCompletionORM.telegram_id == telegram_id,
+            )
+            .order_by(HomeworkCompletionORM.completed_at)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def mark_completed(
+        self,
+        homework_id: UUID,
+        telegram_id: int,
+    ) -> HomeworkCompletionORM:
+        statement = (
+            insert(HomeworkCompletionORM)
+            .values(homework_id=homework_id, telegram_id=telegram_id)
+            .on_conflict_do_update(
+                constraint="uq_homework_completion_user",
+                set_={"completed_at": HomeworkCompletionORM.completed_at},
+            )
+            .returning(HomeworkCompletionORM)
+        )
+        completion = await self.session.scalar(statement)
+        if completion is None:
+            raise RuntimeError("Homework completion was not returned by the database")
+        return completion
+
+    async def unmark_completed(self, homework_id: UUID, telegram_id: int) -> None:
+        statement = delete(HomeworkCompletionORM).where(
+            HomeworkCompletionORM.homework_id == homework_id,
+            HomeworkCompletionORM.telegram_id == telegram_id,
+        )
+        await self.session.execute(statement)

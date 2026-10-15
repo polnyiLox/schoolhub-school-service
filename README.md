@@ -80,6 +80,7 @@ X-Correlation-ID: <optional string>
 - `/classes/{class_id}/schedule/overrides`
 - `/classes/{class_id}/schedule/overrides/by-date/{date}` — разовые изменения на дату;
 - `/classes/{class_id}/homeworks` и `.../history`
+- `/classes/{class_id}/homeworks/completions` и `.../{homework_id}/completion` — личные отметки выполнения;
 - `/classes/{class_id}/homeworks/{homework_id}/attachments` — upload/list/download/delete;
 - `/classes/{class_id}/events`
 - `/classes/{class_id}/days/{date}`

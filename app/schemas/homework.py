@@ -47,6 +47,12 @@ class HomeworkRevisionRead(ORMReadModel):
     created_at: datetime
 
 
+class HomeworkCompletionRead(ORMReadModel):
+    id: UUID
+    homework_id: UUID
+    completed_at: datetime
+
+
 class HomeworkAttachmentCreate(BaseModel):
     object_key: str = Field(min_length=1, max_length=500)
     file_name: str = Field(min_length=1, max_length=255)

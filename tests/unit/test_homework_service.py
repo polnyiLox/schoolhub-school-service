@@ -1,11 +1,11 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
 from app.core.config import settings
-from app.db.models import HomeworkAttachmentORM, HomeworkORM, SubjectORM
+from app.db.models import HomeworkAttachmentORM, HomeworkCompletionORM, HomeworkORM, SubjectORM
 from app.exceptions import (
     AttachmentTooLargeError,
     ClassAccessDeniedError,
@@ -47,6 +47,37 @@ def service(transaction_session, class_id, subject_id, cache=None, storage=None)
         subjects,
         access,
     )
+
+
+@pytest.mark.asyncio
+async def test_member_can_mark_homework_completed(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    tested, repository, _, access = service(transaction_session, class_id, subject_id)
+    entity = homework(class_id, subject_id)
+    completion = HomeworkCompletionORM(
+        id=uuid4(),
+        homework_id=entity.id,
+        telegram_id=user.telegram_id,
+        completed_at=datetime.now(UTC),
+    )
+    repository.get_by_id.return_value = entity
+    repository.mark_completed.return_value = completion
+
+    result = await tested.mark_completed(class_id, entity.id, user)
+
+    assert result.homework_id == entity.id
+    access.require_member.assert_awaited_once_with(class_id, user)
+    repository.mark_completed.assert_awaited_once_with(entity.id, user.telegram_id)
+
+
+@pytest.mark.asyncio
+async def test_homework_completions_are_private_to_current_member(transaction_session, user):
+    class_id, subject_id = uuid4(), uuid4()
+    tested, repository, _, _ = service(transaction_session, class_id, subject_id)
+    repository.list_completions.return_value = []
+
+    assert await tested.list_completions(class_id, user) == []
+    repository.list_completions.assert_awaited_once_with(class_id, user.telegram_id)
 
 
 @pytest.mark.asyncio

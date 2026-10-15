@@ -4,6 +4,7 @@ from .events import DomainEvent, build_domain_event
 from .homework import (
     HomeworkAttachmentCreate,
     HomeworkAttachmentRead,
+    HomeworkCompletionRead,
     HomeworkCreate,
     HomeworkRead,
     HomeworkRevisionRead,
@@ -42,6 +43,7 @@ __all__ = [
     "DomainEvent",
     "HomeworkAttachmentCreate",
     "HomeworkAttachmentRead",
+    "HomeworkCompletionRead",
     "HomeworkCreate",
     "HomeworkRead",
     "HomeworkRevisionRead",

@@ -405,3 +405,5 @@ async def test_created_schedule_event_type_is_correct(transaction_session, admin
         admin,
     )
     assert service.pending_events[0].event_type == "schedule.created"
+    assert service.pending_events[0].payload["subject_name"] == "Math"
+    assert service.pending_events[0].payload["lesson_number"] == 1

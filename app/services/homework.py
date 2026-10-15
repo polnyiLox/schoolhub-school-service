@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import CacheNamespace, JsonCache
 from app.core.config import settings
-from app.db.models import HomeworkAttachmentORM, HomeworkORM
+from app.db.models import HomeworkAttachmentORM, HomeworkORM, SubjectORM
 from app.exceptions import (
     AttachmentTooLargeError,
     HomeworkAttachmentNotFoundError,
@@ -201,7 +201,7 @@ class HomeworkService(EventCollectingService):
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
             self._validate_dates(data.assigned_date, data.due_date)
-            await self._require_subject(class_id, data.subject_id)
+            subject = await self._require_subject(class_id, data.subject_id)
             entity = await self.repository.create(
                 class_id=class_id,
                 subject_id=data.subject_id,
@@ -210,7 +210,7 @@ class HomeworkService(EventCollectingService):
                 text=data.text,
                 created_by_telegram_id=actor.telegram_id,
             )
-            self._add_event("homework.created", entity, actor, correlation_id)
+            self._add_event("homework.created", entity, subject.name, actor, correlation_id)
         await self._invalidate_homework_list(class_id)
         logger.info("Homework created: class_id=%s, homework_id=%s", class_id, entity.id)
         return entity
@@ -229,7 +229,7 @@ class HomeworkService(EventCollectingService):
             entity = await self._get_for_class(class_id, homework_id)
             changes = data.model_dump(exclude_unset=True)
             subject_id = changes.get("subject_id", entity.subject_id)
-            await self._require_subject(class_id, subject_id)
+            subject = await self._require_subject(class_id, subject_id)
             assigned_date = changes.get("assigned_date", entity.assigned_date)
             due_date = changes.get("due_date", entity.due_date)
             self._validate_dates(assigned_date, due_date)
@@ -243,7 +243,7 @@ class HomeworkService(EventCollectingService):
                 )
             changes["updated_by_telegram_id"] = actor.telegram_id
             entity = await self.repository.update(entity, changes)
-            self._add_event("homework.updated", entity, actor, correlation_id)
+            self._add_event("homework.updated", entity, subject.name, actor, correlation_id)
         await self._invalidate_homework(class_id, homework_id)
         logger.info("Homework updated: class_id=%s, homework_id=%s", class_id, homework_id)
         return entity
@@ -260,12 +260,13 @@ class HomeworkService(EventCollectingService):
         attachment_keys: builtins.list[str] = []
         async with self.session.begin():
             entity = await self._get_for_class(class_id, homework_id)
+            subject = await self._require_subject(class_id, entity.subject_id)
             if self.object_storage is not None:
                 attachment_keys = [
                     item.object_key for item in await self.repository.list_attachments(homework_id)
                 ]
             await self.repository.delete(entity)
-            self._add_event("homework.deleted", entity, actor, correlation_id)
+            self._add_event("homework.deleted", entity, subject.name, actor, correlation_id)
         await self._invalidate_homework(class_id, homework_id)
         for object_key in attachment_keys:
             await self._delete_object_best_effort(object_key)
@@ -380,7 +381,7 @@ class HomeworkService(EventCollectingService):
             raise HomeworkNotFoundError()
         return entity
 
-    async def _require_subject(self, class_id: UUID, subject_id: UUID) -> None:
+    async def _require_subject(self, class_id: UUID, subject_id: UUID) -> SubjectORM:
         subject = await self.subject_repository.get_by_id(subject_id)
         if subject is None:
             logger.warning(
@@ -394,6 +395,7 @@ class HomeworkService(EventCollectingService):
                 subject_id,
             )
             raise SubjectDoesNotBelongToClassError()
+        return subject
 
     @staticmethod
     def _validate_dates(assigned_date: date, due_date: date) -> None:
@@ -407,6 +409,7 @@ class HomeworkService(EventCollectingService):
         self,
         event_type: str,
         entity: HomeworkORM,
+        subject_name: str,
         actor: CurrentUser,
         correlation_id: str | None = None,
     ) -> None:
@@ -421,6 +424,8 @@ class HomeworkService(EventCollectingService):
                 payload={
                     "homework_id": str(entity.id),
                     "subject_id": str(entity.subject_id),
+                    "subject_name": subject_name,
+                    "text": entity.text,
                     "assigned_date": entity.assigned_date.isoformat(),
                     "due_date": entity.due_date.isoformat(),
                 },

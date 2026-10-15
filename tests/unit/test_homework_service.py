@@ -263,6 +263,8 @@ async def test_homework_event_contains_ids(transaction_session, user):
     event = tested.pending_events[0]
     assert event.aggregate_id == entity.id
     assert event.class_id == class_id
+    assert event.payload["subject_name"] == "Math"
+    assert event.payload["text"] == entity.text
 
 
 @pytest.mark.asyncio

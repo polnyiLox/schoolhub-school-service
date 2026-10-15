@@ -65,6 +65,7 @@ async def test_valid_event_is_created_by_actor(transaction_session, user):
         is entity
     )
     assert service.pending_events[0].event_type == "school_event.created"
+    assert service.pending_events[0].payload["title"] == "Exam"
 
 
 @pytest.mark.asyncio

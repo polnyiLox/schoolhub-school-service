@@ -153,6 +153,13 @@ class SchoolEventService(EventCollectingService):
                 actor_telegram_id=actor.telegram_id,
                 class_id=entity.class_id,
                 correlation_id=correlation_id,
-                payload={"event_id": str(entity.id), "event_type": entity.event_type.value},
+                payload={
+                    "event_id": str(entity.id),
+                    "event_type": entity.event_type.value,
+                    "title": entity.title,
+                    "description": entity.description,
+                    "starts_at": entity.starts_at.isoformat(),
+                    "ends_at": entity.ends_at.isoformat() if entity.ends_at else None,
+                },
             )
         )

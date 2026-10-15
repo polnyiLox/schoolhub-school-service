@@ -210,7 +210,7 @@ class ScheduleService(EventCollectingService):
         try:
             async with self.session.begin():
                 await self.access.require_editor(class_id, actor)
-                await self._require_subject(class_id, data.subject_id)
+                subject = await self._require_subject(class_id, data.subject_id)
                 if await self.repository.get_slot(class_id, data.weekday, data.lesson_number):
                     logger.warning(
                         "Schedule slot conflict: class_id=%s, weekday=%d, lesson=%d",
@@ -229,7 +229,13 @@ class ScheduleService(EventCollectingService):
                     room=data.room,
                 )
                 self._add_event(
-                    "schedule.created", "schedule", entity.id, class_id, actor, correlation_id
+                    "schedule.created",
+                    "schedule",
+                    entity.id,
+                    class_id,
+                    actor,
+                    correlation_id,
+                    self._entry_event_payload(entity, subject.name),
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -257,7 +263,7 @@ class ScheduleService(EventCollectingService):
                 entity = await self._get_entry(class_id, entry_id)
                 changes = data.model_dump(exclude_unset=True)
                 subject_id = changes.get("subject_id", entity.subject_id)
-                await self._require_subject(class_id, subject_id)
+                subject = await self._require_subject(class_id, subject_id)
                 start_time = changes.get("start_time", entity.start_time)
                 end_time = changes.get("end_time", entity.end_time)
                 self._validate_times(start_time, end_time)
@@ -273,7 +279,13 @@ class ScheduleService(EventCollectingService):
                     raise ScheduleConflictError()
                 entity = await self.repository.update_entry(entity, changes)
                 self._add_event(
-                    "schedule.updated", "schedule", entity.id, class_id, actor, correlation_id
+                    "schedule.updated",
+                    "schedule",
+                    entity.id,
+                    class_id,
+                    actor,
+                    correlation_id,
+                    self._entry_event_payload(entity, subject.name),
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -297,9 +309,16 @@ class ScheduleService(EventCollectingService):
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
             entity = await self._get_entry(class_id, entry_id)
+            subject = await self._require_subject(class_id, entity.subject_id)
             await self.repository.delete_entry(entity)
             self._add_event(
-                "schedule.deleted", "schedule", entry_id, class_id, actor, correlation_id
+                "schedule.deleted",
+                "schedule",
+                entry_id,
+                class_id,
+                actor,
+                correlation_id,
+                self._entry_event_payload(entity, subject.name),
             )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule entry deleted: class_id=%s, entry_id=%s", class_id, entry_id)
@@ -322,6 +341,11 @@ class ScheduleService(EventCollectingService):
                 await self.access.require_editor(class_id, actor)
                 await self._validate_override(
                     class_id, data.override_type, data.subject_id, data.start_time, data.end_time
+                )
+                subject = (
+                    await self._require_subject(class_id, data.subject_id)
+                    if data.subject_id is not None
+                    else None
                 )
                 if await self.repository.get_override_slot(class_id, data.date, data.lesson_number):
                     logger.warning(
@@ -350,6 +374,7 @@ class ScheduleService(EventCollectingService):
                     class_id,
                     actor,
                     correlation_id,
+                    self._override_event_payload(entity, subject.name if subject else None),
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -385,6 +410,11 @@ class ScheduleService(EventCollectingService):
                 await self._validate_override(
                     class_id, effective_type, subject_id, start_time, end_time
                 )
+                subject = (
+                    await self._require_subject(class_id, subject_id)
+                    if subject_id is not None
+                    else None
+                )
                 target_date = changes.get("date", entity.date)
                 lesson_number = changes.get("lesson_number", entity.lesson_number)
                 conflict = await self.repository.get_override_slot(
@@ -405,6 +435,7 @@ class ScheduleService(EventCollectingService):
                     class_id,
                     actor,
                     correlation_id,
+                    self._override_event_payload(entity, subject.name if subject else None),
                 )
         except IntegrityError as error:
             self._raise_slot_conflict(
@@ -430,6 +461,11 @@ class ScheduleService(EventCollectingService):
         async with self.session.begin():
             await self.access.require_editor(class_id, actor)
             entity = await self._get_override(class_id, override_id)
+            subject = (
+                await self._require_subject(class_id, entity.subject_id)
+                if entity.subject_id is not None
+                else None
+            )
             await self.repository.delete_override(entity)
             self._add_event(
                 "schedule.override_deleted",
@@ -438,6 +474,7 @@ class ScheduleService(EventCollectingService):
                 class_id,
                 actor,
                 correlation_id,
+                self._override_event_payload(entity, subject.name if subject else None),
             )
         await self._invalidate_schedule(class_id)
         logger.info("Schedule override deleted: class_id=%s, override_id=%s", class_id, override_id)
@@ -513,6 +550,7 @@ class ScheduleService(EventCollectingService):
         class_id: UUID,
         actor: CurrentUser,
         correlation_id: str | None,
+        payload: dict[str, object],
     ) -> None:
         self.record_event(
             build_domain_event(
@@ -522,9 +560,38 @@ class ScheduleService(EventCollectingService):
                 actor_telegram_id=actor.telegram_id,
                 class_id=class_id,
                 correlation_id=correlation_id,
-                payload={"entity_id": str(aggregate_id)},
+                payload={"entity_id": str(aggregate_id), **payload},
             )
         )
+
+    @staticmethod
+    def _entry_event_payload(entity: ScheduleEntryORM, subject_name: str) -> dict[str, object]:
+        return {
+            "subject_name": subject_name,
+            "weekday": entity.weekday,
+            "lesson_number": entity.lesson_number,
+            "start_time": entity.start_time.isoformat(timespec="minutes"),
+            "end_time": entity.end_time.isoformat(timespec="minutes"),
+            "room": entity.room,
+        }
+
+    @staticmethod
+    def _override_event_payload(
+        entity: ScheduleOverrideORM,
+        subject_name: str | None,
+    ) -> dict[str, object]:
+        return {
+            "date": entity.date.isoformat(),
+            "lesson_number": entity.lesson_number,
+            "override_type": entity.override_type.value,
+            "subject_name": subject_name,
+            "start_time": (
+                entity.start_time.isoformat(timespec="minutes") if entity.start_time else None
+            ),
+            "end_time": entity.end_time.isoformat(timespec="minutes") if entity.end_time else None,
+            "room": entity.room,
+            "reason": entity.reason,
+        }
 
     @staticmethod
     def _raise_slot_conflict(
